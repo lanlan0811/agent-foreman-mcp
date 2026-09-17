@@ -341,7 +341,7 @@ parameter of type 'number' (src/run.ts:42)。请只修这一处类型问题并�
 
 补充：自动返修（autoFixRounds）路径下，server 会先把失败证据写成修复计划文档，再把该文档路径引用进下一轮指令。**落盘位置按 agent 不同**：
 
-- `codex`：写到**项目内** `fixPlanDir`（默认项目根 `.zcode/plans/codex-fix-r<N>.md`，文件名含轮次不覆盖历史）——因为 Codex 只能读项目工作区内的文件。
+- `codex`：写到**项目内** `fixPlanDir`（默认项目根 `.agent-foreman/plans/codex-fix-r<N>.md`，文件名含轮次不覆盖历史）——因为 Codex 只能读项目工作区内的文件。
 - `zcode` / `traework` 等其余路径：写到 **MCP 任务数据目录**（`<home>/tasks/<taskId>/rework-<taskId>-r<N>.md`），避免临时计划污染项目工作区。
 
 手动 `rework_task` 的 feedback 则按上面的针对性模板书写，不生成计划文档。

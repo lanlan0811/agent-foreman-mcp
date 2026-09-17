@@ -1,6 +1,6 @@
 # TraeWork GUI 驱动接入（CDP）
 
-本文档说明 `tianshu-mcp` 如何通过 Chrome DevTools Protocol（CDP）驱动 TraeWork（TRAE SOLO CN）完成
+本文档说明 `agent-foreman-mcp` 如何通过 Chrome DevTools Protocol（CDP）驱动 TraeWork（TRAE SOLO CN）完成
 「派活 → 等待开发完成 → 验收 → 失败返修 → 再验收」闭环。英文版见 [traework-cdp.en.md](traework-cdp.en.md)。
 
 ---
@@ -30,7 +30,7 @@ CDP 驱动走的是完整客户端链路：renderer → ai_agent → TDE → 网
   ```
 - 无需安装额外依赖：CDP 客户端只用 Node 内置 `http` + 全局 `WebSocket`（Node ≥ 20）
 
-> `tianshu-mcp` 会**优先复用**已带端口的实例；仅在没有可用实例时才带端口启动新实例。
+> `agent-foreman-mcp` 会**优先复用**已带端口的实例；仅在没有可用实例时才带端口启动新实例。
 > 它**绝不会终止用户自己启动的实例**（见 §6 安全红线）。
 
 ---
@@ -38,7 +38,7 @@ CDP 驱动走的是完整客户端链路：renderer → ai_agent → TDE → 网
 ## 3. 快速上手
 
 ```jsonc
-// 通过 MCP 调用（天枢 / 任意 MCP 客户端）
+// 通过 MCP 调用（任意 MCP 宿主）
 run_task({
   "projectPath": "D:\\Trae项目\\my-app",   // 绝对路径
   "agentId": "traework",
@@ -92,7 +92,7 @@ node scripts/probe-traework.mjs send "任务书"       # 端到端发一条并�
 
 ## 4. 配置项（`agent-profiles.json` 的 `traework` 段）
 
-内置默认值见 `src/agents/builtin.ts`；用户数据目录 `~/.tianshu-mcp/agent-profiles.json` 可整键覆盖。
+内置默认值见 `src/agents/builtin.ts`；用户数据目录 `~/.agent-foreman/agent-profiles.json` 可整键覆盖。
 
 ```jsonc
 {
@@ -268,29 +268,3 @@ src/agents/traework/
 
 ---
 
-## 10. 验证记录（2026-09-08）
-
-| 项 | 结果 |
-|---|---|
-| CDP 连接 | ✅ `--remote-debugging-port=9222` 连通，页面目标为 `solo-lite.html` |
-| 选择器命中 | ✅ 输入框/新建任务/任务列表/模式/模型下拉/项目按钮/下拉项/底部按钮均实测命中 |
-| 项目绑定 | ✅ 未命中下拉时经原生对话框成功登记 `D:\Trae项目\ts-e2e-smoke`（`state.vscdb` 条目 18→19） |
-| 模型切换 | ✅ 切换到 `GLM-5.3` 并严格验证 |
-| **端到端** | ✅ `run_task(agentId=traework, model=GLM-5.3, autoVerify=true)` 驱动 TraeWork 创建 `result.txt`，自动验收通过（`succeeded`，changedFiles `result.txt`） |
-| 单测/集成 | ✅ 153/153 通过（新增 81 项，含返修闭环与竞态回归） |
-| lint / typecheck / build | ✅ 全绿 |
-| **CI（GitHub Actions）** | ✅ **7/7 全绿** —— ubuntu/macos/windows × Node 20/22 + npm tarball 检查（run 34222781967，commit `e8c59cc`） |
-
-### 10.1 实现期修复的两个既有缺陷
-
-1. **rework 反馈竞态（预存 bug，负载下偶发、CI Windows/Node22 命中）**
-   - 现象：`rework_task(feedback)` 后返修轮拿不到 feedback，任务卡在 failed。
-   - 根因：终态快照先落盘，调用方看到 failed 后立即写入 `reworkFeedback`；而上一轮
-     `startTask` 的**收尾**会 `delete meta.reworkFeedback`，把刚写入的新反馈一起抹掉。
-   - 修复：改为在 `startTask` **启动时**原子取走并清空 feedback，不再在收尾 delete。
-   - 回归：`test/integration/rework-feedback-race.test.ts`（连续 3 轮「失败→立即 rework」）。
-2. **`projectBasename` 跨平台（Linux/macOS CI 失败）**
-   - 现象：Linux/macOS 上 `path.basename("D:\\a\\b")` 返回整串（POSIX 不把 `\` 当分隔符）。
-   - 修复：显式按 `\` 与 `/` 切分。
-
-> 真机测试需 TraeWork 运行，**不入 CI**（见 `docs/acceptance-config.md` 的测试分层说明）。

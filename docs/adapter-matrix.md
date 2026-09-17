@@ -8,12 +8,10 @@
 
 | Agent | 接口类型 | 状态 | 可执行发现 | 登录态 | 任务/文件回读 | 备注 |
 |---|---|---|---|---|---|---|
-| **Codex**（OpenAI 桌面端） | **MSIX GUI + CDP**（`codex-gui` adapter） | ✅ **Windows 真机已验证**（COM 激活 + CDP + 关键选择器 + 验收返修闭环，2026-09-11；见 [codex-windows-smoke.md](codex-windows-smoke.md)；macOS 标 research） | Appx 查询优先（`Get-AppxPackage` → InstallLocation）→ 扫盘 `WindowsApps\OpenAI.Codex_*` 取最新版本 | 复用 `~/.codex`（auth.json），与用户手动打开的实例共享 | DOM 回读项目、模型/思考等级、权限、回复 | GUI 宿主 `app\ChatGPT.exe` 无法直启（策略拒绝），须 `IApplicationActivationManager` 激活并注入专属 `--user-data-dir`；见 [codex-gui-cdp.md](codex-gui-cdp.md) |
-| **Zcode**（ZCode 桌面） | Electron + 独立 `zcode-gui` CDP adapter | **research（Windows 3.11.2 选择器已适配，macOS 待补齐）** | 数据驱动固定盘/注册表/标准目录/macOS bundle | 复用本机登录态 | 模型直选 + provider/family 兜底；composer 项目复选项与绑定回读 | Windows 证据见 [zcode-windows-smoke.md](zcode-windows-smoke.md)；无头 CLI 仍不存在 |
-| **TraeWork / TRAE SOLO CN** | 桌面 IDE（v1.107.1）+ **CDP GUI 驱动** | ✅ **已接入并真机验证**（2026-09-08；见 T1 更正与 [traework-cdp.md](traework-cdp.md)） | 无头 CLI 不存在；以 `--remote-debugging-port` 驱动聊天 UI | 复用 TraeWork 桌面端登录态（本 MCP 不读取凭证） | 从 DOM 提取回复；项目文件由 TraeWork 自身写入 | `byted-solo.builtin-mcp` 是 MCP 客户端扩展，非被驱动接口 |
-| **stub**（测试用） | 本地脚本 | ✅ 内置测试 | 测试注入 profile | 无 | — | 仅 M1 集成测试使用 |
+| **TraeWork / TRAE SOLO CN** | 桌面 IDE + **CDP GUI 驱动** | **已接入并真机验证**（见 [traework-cdp.md](traework-cdp.md)） | 无头 CLI 不存在；以 `--remote-debugging-port` 驱动聊天 UI | 复用 TraeWork 桌面端登录态（本 MCP 不读取凭证） | 从 DOM 提取回复；项目文件由 TraeWork 自身写入 | `byted-solo.builtin-mcp` 是 MCP 客户端扩展，非被驱动接口 |
+| **stub**（测试用） | 本地脚本 | 内置测试 | 测试注入 profile | 无 | — | 仅 M1 集成测试使用 |
 
-状态图例：✅ 可接入（已实现/已冒烟）｜🔍 调研中｜⬜ 规划/占位｜❌ 已证伪不支持
+状态图例：可接入（已实现/已冒烟）｜调研中｜规划/占位｜已证伪不支持
 
 ## 扩展新 agent（三步）
 
@@ -35,7 +33,6 @@
 - `--sandbox read-only|workspace-write|danger-full-access`；**实测 0.153.4 中 `--sandbox` 与 `--approve-for-me` 互斥**，不能同用；非交互自动化用 `--sandbox workspace-write` 即可（approval 输出显示 never）。
 - `--json` 事件输出 JSONL；`-o, --output-last-message <FILE>` 取末条消息；`--ephemeral` 不落会话文件。
 - `--skip-git-repo-check`：允许非 git 仓库（我们的任务都在 git 项目内，可留可去）。
-- 详细实测记录见 [m2-smoke-record.md](m2-smoke-record.md)。
 
 **结论（adapter 配置基线，M2 已真实冒烟定稿）**：
 
@@ -97,11 +94,11 @@
 - `~/.zcode/cli/` 是运行时数据目录（agents/exec/rollout/`sess_*` 会话 + 一个含 `mcp.servers` 的 `config.json`，schema 与本项目一致），**不是可执行入口**。
 - `%PATH%`/npm 全局无 `zcode` 命令；无 headless 子命令文档/入口。
 
-因此 tianshu-mcp **无法把 Zcode 作为外部 agent 无头 spawn**（R14：不 pty 硬接、不 GUI 自动化默认实施）。内置 profile 已把 zcode 置为 `status: "research"`→应改为 unsupported 说明留待：若 ZCode 未来提供 headless CLI/官方接口，可重跑本调研。
+因此 agent-foreman-mcp **无法把 Zcode 作为外部 agent 无头 spawn**（R14：不 pty 硬接、不 GUI 自动化默认实施）。内置 profile 已把 zcode 置为 `status: "research"`→应改为 unsupported 说明留待：若 ZCode 未来提供 headless CLI/官方接口，可重跑本调研。
 
 > 2026-09-11 更正：无头 CLI 结论保持不变，但 Electron CDP GUI 路线已实现为独立 `zcode-gui` adapter，支持 `needs_user/continue_task` 和自动验收返修。内置 profile 在 Windows/macOS 真机闭环全部完成前保持 `research`。详见 [zcode-cdp.md](zcode-cdp.md)。
 
-## 只读调研来源（D:\Tianshu 逆向，仅作事实依据）
+## 只读调研来源（对上一代宿主工程的只读逆向分析，仅作事实依据）
 
 - MCP 机制与工具回传约束：见开发计划 §1（只回文本、异步轮询、长任务需异步化）。
 - 本机探测（2026-09-07）：Node v24 / 无 agent CLI 在 PATH；Codex 桌面端自带 `codex.exe` CLI；`codex-code-mode-host.exe` / computer-use 运行时 / chrome-native-host 存在。

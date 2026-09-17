@@ -6,8 +6,8 @@ Security fixes target the latest released version only. Please upgrade before re
 
 | Version | Supported |
 |---|---|
-| 0.1.x (latest) | ✅ |
-| Earlier versions | ❌ |
+| 1.x (latest) | Supported |
+| Earlier versions | Not supported |
 
 ## Reporting a vulnerability
 
@@ -15,12 +15,12 @@ Security fixes target the latest released version only. Please upgrade before re
 
 Please use GitHub's private vulnerability reporting:
 
-1. Open <https://github.com/lanlan0811/tianshu-mcp/security/advisories/new>
+1. Open <https://github.com/lanlan0811/agent-foreman-mcp/security/advisories/new>
 2. Or use the repository's **Security → Advisories → Report a vulnerability**.
 
 Please include as much as you can:
 
-- affected version (`npm view tianshu-mcp version` or `package.json`);
+- affected version (`npm view agent-foreman-mcp version` or `package.json`);
 - reproduction steps (minimal config/commands);
 - impact assessment (what can be read/written, whether local access is required);
 - mitigation suggestions if known.
@@ -65,7 +65,7 @@ Understanding these boundaries helps you judge whether a finding is intended beh
   `{ childVarName: hostVarName }` reference form and block the whole round when missing; the MCP itself
   does not read the value of that variable.
 - Task artifacts (logs, reports, repair plans) are written only to the task data directory and the
-  project's `.tianshu-mcp/`.
+  project's `.agent-foreman/`.
 
 ### 3. Processes and paths
 
@@ -86,7 +86,7 @@ Native automation is allowed **only** for a folder picker newly opened by TraeWo
 ### 5. Permission approvals
 
 Write/execute tools (`run_task` / `cancel_task` / `rework_task` / `continue_task`) declare `requireApproval` by default and
-are gated by the host (Tianshu) UI; read/query/verify tools need no approval.
+are gated by the host UI; read/query/verify tools need no approval.
 
 ### 6. ZCode GUI boundary
 

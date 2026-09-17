@@ -1,6 +1,6 @@
 # Agent Profiles & Dynamic Discovery (English summary)
 
-Full Chinese spec: [agent-profiles.md](agent-profiles.md). External AI-Agents plug in via **profiles** — declarative data in `~/.tianshu-mcp/agent-profiles.json` (env `TIANSHU_MCP_HOME` overrides). Adding an agent = one profile (no code change) unless custom output parsing is needed.
+Full Chinese spec: [agent-profiles.md](agent-profiles.md). External AI-Agents plug in via **profiles** — declarative data in `~/.agent-foreman/agent-profiles.json` (env `AGENT_FOREMAN_HOME` overrides). Adding an agent = one profile (no code change) unless custom output parsing is needed.
 
 ## Merge order
 
@@ -111,11 +111,11 @@ retain the instance and expose `agentEndReason` / `keptInstance` in metadata.
       },
       "gui": {
         "activation": "msix-com",
-        "userDataDir": "{LOCALAPPDATA}/tianshu-mcp/codex-gui/profile",
+        "userDataDir": "{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile",
         "appxPackageName": "OpenAI.Codex",
         "cdpPort": 9333, "cdpPortAuto": true,
         "permissionMode": "完全访问",
-        "fixPlanDir": ".zcode/plans",
+        "fixPlanDir": ".agent-foreman/plans",
         "defaultAutoFixRounds": 5,
         "launchTimeoutMs": 60000, "pollIntervalMs": 3000,
         "stableRounds": 4, "idleTimeoutMs": 600000,

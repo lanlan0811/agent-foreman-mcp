@@ -44,7 +44,7 @@ run_task(
   projectPath=D:/repo/app,
   agentId=zcode,
   model=DeepSeek/deepseek-flash,
-  task=根据 `.codex/plans/feature.md` 与 `./design-system` 完成开发,
+  task=根据 `docs/plans/feature.md` 与 `./design-system` 完成开发,
   autoVerify=true
 )
 ```
@@ -112,7 +112,7 @@ ZCode 专用可选布尔，只影响**有项目模式**：
 
 轮询同时读取停止按钮、加载卡、活动工具、助手回复哈希、问题卡、输入框和发送按钮。停止、加载或活动工具任一存在即保持 `running`；文本短暂停顿不会提前完成。默认每 30 秒写一条结构化进度摘要。
 
-正常完成后进入统一验收引擎。验收失败时，唯一返修计划写在 `<TIANSHU_MCP_HOME>/tasks/<taskId>/rework-<taskId>-r<round>.md`，提示词包含该绝对路径和完整报告绝对路径；不向项目写临时 `.tianshu-mcp` 副本。ZCode 无法读取计划时失败，不降级成一句摘要。轮次用尽进入 `needs_attention`。
+正常完成后进入统一验收引擎。验收失败时，唯一返修计划写在 `<AGENT_FOREMAN_HOME>/tasks/<taskId>/rework-<taskId>-r<round>.md`，提示词包含该绝对路径和完整报告绝对路径；不向项目写临时 `.agent-foreman` 副本。ZCode 无法读取计划时失败，不降级成一句摘要。轮次用尽进入 `needs_attention`。
 
 ## 排障
 
@@ -129,7 +129,6 @@ ZCode 专用可选布尔，只影响**有项目模式**：
 
 | 平台 | 已验证 | 未完成 |
 |---|---|---|
-| Windows 10 x64 | 自动发现 `D:\Z-Code\ZCode\ZCode.exe`、版本 `3.11.2.6792`、既有无 CDP 实例保护、CDP 启动、原生文件夹面板导入与完整路径回读、`DeepSeek/deepseek-flash` 显示/内部 ID 回读、“完全访问”回读、真实文件开发与 2/2 验收、受控首轮失败后同会话返修通过、`AskUserQuestion → needs_user → continue_task(PASS)` 同会话续跑并 2/2 验收通过 | 无；详见 [Windows 真机验收记录](zcode-windows-smoke.md) |
 | macOS arm64 | 安装发现（`/Applications/ZCode.app`，3.11.2）、CDP 启动与复用（进程标题改写适配 + 端口段补扫）、静息选择器全命中、既存项目绑定回读、`bigmodel/GLM-5.3-Flash` 与「完全访问」回读、发送 → `stop_button` 运行证据 → `reply_stable`、真实文件开发与验收 PASS（diffstat +2 -0）、`succeeded`；手动驱动「打开文件夹」面板全流程（窗口形态 + AX 直写路径 → 确认 → 绑定成功） | 取消真停、同会话返修、`continue_task`、新项目（自动化面板）端到端；详见下节「macOS 特有结论」 |
 
 Windows 闭环已完成；macOS 基本闭环已验证（2026-09-13），取消/返修/新建项目矩阵补齐之前，内置 profile 必须保持 `research`。

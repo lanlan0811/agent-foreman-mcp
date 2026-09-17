@@ -1,11 +1,10 @@
 # Codex Desktop GUI Driver (codex-gui-cdp.en.md)
 
-The tianshu-mcp Codex adapter drives the OpenAI Codex desktop app (the ChatGPT desktop application) through the full loop: locate install → launch GUI → bind/create project → select model and reasoning level → send instructions → run detection → verify → repair.
+The agent-foreman-mcp Codex adapter drives the OpenAI Codex desktop app (the ChatGPT desktop application) through the full loop: locate install → launch GUI → bind/create project → select model and reasoning level → send instructions → run detection → verify → repair.
 
 - Implementation: `src/agents/codex/**`
-- Plan: `.zcode/plans/codex-gui-adapter-plan.md`
+- Plan: `.agent-foreman/plans/codex-gui-adapter-plan.md`
 - Status: verified on Windows real hardware; macOS is `research` (unverified, excluded from readiness)
-- Hardware acceptance: [codex-windows-smoke.en.md](codex-windows-smoke.en.md)
 - Related: [adapter-matrix.en.md](adapter-matrix.en.md), [agent-profiles.en.md](agent-profiles.en.md), [acceptance-config.md](acceptance-config.md)
 
 ---
@@ -37,8 +36,8 @@ The CDP debug port only opens under a **dedicated user-data-dir**:
 
 A separate profile **loses no data**: projects, sessions and auth live in `~/.codex/` (`.codex-global-state.json`, `config.toml`, `auth.json`), shared across profiles. The managed profile directory defaults to:
 
-- Windows: `%LOCALAPPDATA%\tianshu-mcp\codex-gui\profile`
-- macOS (not enabled): `~/.tianshu-mcp/codex-gui/profile`
+- Windows: `%LOCALAPPDATA%\agent-foreman-mcp\codex-gui\profile`
+- macOS (not enabled): `~/.agent-foreman/codex-gui/profile`
 
 ## 3. Install discovery
 
@@ -113,7 +112,7 @@ Read-back: while the menu is open the trigger's own text is unreadable, so read 
 - **Match rule (decision 2)**: match the target directory's **basename** against Codex's project display names, case-insensitively on Windows; multiple hits → `project_ambiguous`, never guess.
 - **Existing project**: click `在 <name> 中开始新聊天` (fallback to `<name> 的项目操作`) → confirm by reading back the bottom workspace chip.
 - **New project (two-tier strategy)**:
-  1. **Automatic registration first** (`src/agents/codex/registry.ts`; deterministic, preferred): write the target directory into Codex's project state `~/.codex/.codex-global-state.json` under `local-projects` + `project-order`, equivalent to the user creating the project once inside Codex. Constraints: **idempotent** (no-op if already registered), **backup before writing** (`.tianshu-mcp-backup.json`, never overwriting an existing backup), **atomic write**, only these two keys are touched, and it only runs while the **MCP-managed instance is stopped** (so a running Codex cannot overwrite it); the user's own default-profile instance is never touched. On non-Windows / missing or unparseable state file → returns `skipped` and falls back to tier 2.
+  1. **Automatic registration first** (`src/agents/codex/registry.ts`; deterministic, preferred): write the target directory into Codex's project state `~/.codex/.codex-global-state.json` under `local-projects` + `project-order`, equivalent to the user creating the project once inside Codex. Constraints: **idempotent** (no-op if already registered), **backup before writing** (`.agent-foreman-backup.json`, never overwriting an existing backup), **atomic write**, only these two keys are touched, and it only runs while the **MCP-managed instance is stopped** (so a running Codex cannot overwrite it); the user's own default-profile instance is never touched. On non-Windows / missing or unparseable state file → returns `skipped` and falls back to tier 2.
   2. **UI creation** (fallback, matching the screenshot flow): click the project picker → "新建项目" → click the **center blank area** of "源文件夹" (**not** "创建项目" directly) → the Windows **native** folder dialog opens → keyboard-automate the **backslash** absolute path and confirm → confirm the source folder is populated → click "创建项目".
 
 > Automatic registration removes the "unregistered project stuck at project creation" pain: on hardware, an
@@ -142,7 +141,7 @@ The native dialog is unreachable from CDP, so `src/agents/codex/dialog.ts` drive
 `src/agents/codex/liveness.ts` (decisions 7/8):
 
 1. **The stop button is the authoritative running signal**: its presence means `running`; never declare completion then.
-2. **Text stability counts as completion evidence only after a running signal was observed** — this avoids declaring "still generating but the DOM happens to be static" as complete when the stop-button selector drifts (the lesson from TraeWork's early misjudgement, see [traework-task-liveness-plan](../.zcode/plans/traework-task-liveness-plan.md)).
+2. **Text stability counts as completion evidence only after a running signal was observed** — this avoids declaring "still generating but the DOM happens to be static" as complete when the stop-button selector drifts (the lesson from TraeWork's early misjudgement).
 3. If a running signal is **never observed** → do not declare completion; switch to idle timing and eventually `idle_timeout`: end the round but **keep the instance** (fail-open, no worse than the status quo).
 4. Total timeout `taskTimeoutMs` (default 30 min) + idle timeout `idleTimeoutMs` (default 10 min).
 
@@ -150,8 +149,8 @@ The native dialog is unreachable from CDP, so `src/agents/codex/dialog.ts` drive
 
 ## 9. Verification and repair
 
-- **Verification (decisions 9/20)**: reuses the existing `AcceptanceEngine` (`src/verify/acceptance.ts`); priority is `extraChecks` > project `.tianshu-mcp/acceptance.json` > `projects.json` records > **default set**; the default set derives `typecheck/lint/test/build` from `package.json` `scripts`. When no command is runnable it is labelled **weak verification** (`src/agents/codex/verify.ts`).
-- **Repair plan (decisions 11/12)**: on verification failure the **MCP generates** the plan document, inside the **project** at `gui.fixPlanDir` (default `.zcode/plans/`), named `codex-fix-r<N>.md` (**with round number, one per round, never overwritten**). Because the filename is known before sending, it can be referenced directly in the repair instruction without reading it back from the reply.
+- **Verification (decisions 9/20)**: reuses the existing `AcceptanceEngine` (`src/verify/acceptance.ts`); priority is `extraChecks` > project `.agent-foreman/acceptance.json` > `projects.json` records > **default set**; the default set derives `typecheck/lint/test/build` from `package.json` `scripts`. When no command is runnable it is labelled **weak verification** (`src/agents/codex/verify.ts`).
+- **Repair plan (decisions 11/12)**: on verification failure the **MCP generates** the plan document, inside the **project** at `gui.fixPlanDir` (default `.agent-foreman/plans/`), named `codex-fix-r<N>.md` (**with round number, one per round, never overwritten**). Because the filename is known before sending, it can be referenced directly in the repair instruction without reading it back from the reply.
 - **Repair loop (decision 10)**: up to `autoFixRounds` rounds (Codex default **5**); each round sends a repair instruction to the **same session** (citing that md plus the raw failure output), then re-verifies. Exhausted rounds → `needs_attention`.
 
 ## 10. Task parameters
@@ -181,10 +180,10 @@ The initial instruction reads: `根据计划文档(<planDoc>)和设计系统(<de
   },
   "gui": {
     "activation": "msix-com",                          // required: COM activation
-    "userDataDir": "{LOCALAPPDATA}/tianshu-mcp/codex-gui/profile",  // required: dedicated profile
+    "userDataDir": "{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile",  // required: dedicated profile
     "cdpPort": 9333, "cdpPortAuto": true,
     "permissionMode": "完全访问",
-    "fixPlanDir": ".zcode/plans",
+    "fixPlanDir": ".agent-foreman/plans",
     "defaultAutoFixRounds": 5,
     "launchTimeoutMs": 60000, "pollIntervalMs": 3000,
     "stableRounds": 4, "idleTimeoutMs": 600000,

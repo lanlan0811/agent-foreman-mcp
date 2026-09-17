@@ -1,4 +1,4 @@
-# Contributing to tianshu-mcp
+# Contributing to agent-foreman-mcp
 
 Thanks for your interest in contributing. This guide covers the development environment, engineering
 conventions, and the submission workflow.
@@ -19,8 +19,8 @@ Chinese version: [CONTRIBUTING.md](CONTRIBUTING.md)
 ## 2. Local development
 
 ```bash
-git clone https://github.com/lanlan0811/tianshu-mcp.git
-cd tianshu-mcp
+git clone https://github.com/lanlan0811/agent-foreman-mcp.git
+cd agent-foreman-mcp
 npm ci                # install from the lockfile
 npm run build         # sync-version + tsc → dist/
 npm test              # vitest (unit + integration + protocol)
@@ -107,17 +107,16 @@ Test layers:
 
 ## 6. Commits and branches
 
-- **Commit on `master` only**; do not create other branches.
+- **Commit on `main` only**; do not create other branches.
 - **Commit messages are in Chinese**, preferably `type: summary` with type one of
   `feat` / `fix` / `docs` / `chore` / `test` / `refactor`.
 - **One feature, one commit**, with all gates green before committing.
-- Push to both remotes: `github` (primary) and `gitee` (mirror).
+- Push to `origin` (the GitHub primary). This project has no mirror repository.
 
 ```bash
 git add .
 git commit -m "feat: add xxx"
-git push github master
-git push gitee master
+git push origin main
 ```
 
 ## 7. Versioning and releases

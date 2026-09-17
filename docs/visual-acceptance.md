@@ -9,9 +9,9 @@
 非视觉功能保留 Node.js >=20；视觉模块要求 >=20.3。浏览器和图片库按需加载，安装 npm 包和启动 MCP 不下载浏览器。显式安装固定浏览器：
 
 ```sh
-tianshu-mcp visual browser install
-tianshu-mcp visual doctor /path/to/project
-tianshu-mcp visual init /path/to/project
+agent-foreman-mcp visual browser install
+agent-foreman-mcp visual doctor /path/to/project
+agent-foreman-mcp visual init /path/to/project
 ```
 
 固定依赖为 puppeteer-core 24.43.1、@puppeteer/browsers 2.13.2、sharp 0.34.5、pixelmatch 7.2.0。安装器从 Puppeteer 的 revision 映射读取浏览器版本。浏览器缓存位于 MCP 数据目录的 `browsers`。缺少可选 sharp 时执行 `npm install --include=optional`；缺失依赖不会阻止旧 MCP 功能启动。
@@ -20,7 +20,7 @@ Windows 10 x64 本机最小启动与截图已验证：Windows 10 Pro 10.0.19045�
 
 ## 项目配置
 
-编辑 `.tianshu-mcp/acceptance.json`。`init` 合并一个禁用的模板并保留原配置；已有 visual 时拒绝覆盖。配置不存在时沿用默认命令推导；存在但 JSON/schema 无效时阻塞。省略 `checks` 继续推导命令，显式 `checks: []` 才关闭命令配置。`extraChecks` 和 `checksMode=replace` 不覆盖视觉门禁。默认 `requireChanges: true`；只验收已有产物可显式设为 false。
+编辑 `.agent-foreman/acceptance.json`。`init` 合并一个禁用的模板并保留原配置；已有 visual 时拒绝覆盖。配置不存在时沿用默认命令推导；存在但 JSON/schema 无效时阻塞。省略 `checks` 继续推导命令，显式 `checks: []` 才关闭命令配置。`extraChecks` 和 `checksMode=replace` 不覆盖视觉门禁。默认 `requireChanges: true`；只验收已有产物可显式设为 false。
 
 ```json
 {
@@ -88,8 +88,8 @@ storageState 是项目相对 JSON 文件，结构为 `cookies: [{name,value,doma
 可加 `imports: [{caseId,viewportId,file}]` 从项目内 PNG/JPEG/WebP 导入。候选保存在 MCP 数据目录，返回 candidateId、digest、preview。先查看预览再明确批准：
 
 ```sh
-tianshu-mcp visual baseline prepare prepare-request.json
-tianshu-mcp visual baseline approve approve-request.json
+agent-foreman-mcp visual baseline prepare prepare-request.json
+agent-foreman-mcp visual baseline approve approve-request.json
 ```
 
 批准 JSON 为 `{candidateId,expectedDigest,approvalNote,taskId?}`。可选 taskId 只能是同项目的 needs_attention 任务。摘要、原基准、规则或项目不匹配会拒绝。被 Git 忽略的目标也拒绝，不强制添加、不改忽略文件。MCP `prepare_visual_baseline`/`approve_visual_baseline` 接收相同 JSON；两者是有副作用操作，宿主必须执行授权控制。自动返修禁止批准基准。
@@ -97,15 +97,15 @@ tianshu-mcp visual baseline approve approve-request.json
 任务动工前冻结规则及基准摘要，每轮检查前后核对。规则变动需要独立审阅：
 
 ```sh
-tianshu-mcp visual rules review TASK_ID
-tianshu-mcp visual rules approve TASK_ID REVIEW_ID DIGEST "用户确认的批准说明"
+agent-foreman-mcp visual rules review TASK_ID
+agent-foreman-mcp visual rules approve TASK_ID REVIEW_ID DIGEST "用户确认的批准说明"
 ```
 
 基准/环境阻塞进入 needs_attention，并保留待重新验收标记。处理后 rework_task 先验收，通过则结束，仍阻塞则等待；只有真实缺陷才进入返修。
 
 ## AI 内容校验（可选，默认关闭）
 
-校验图片或页面截图**内容**是否符合用户显式声明的期望描述（如「Logo 含蓝色齿轮与文字 TIANSHU」、
+校验图片或页面截图**内容**是否符合用户显式声明的期望描述（如「Logo 含蓝色齿轮与文字 AGENT_FOREMAN」、
 「存在用户名与密码输入框及登录按钮」）。与像素/规格检查平行，作为独立结果项 `kind:"content"` 进入统一报告。
 
 **凭证零管理**：MCP 不读取、不存储、不转发任何密钥，也不实现模型/厂商 HTTP 客户端。判定完全委托给
@@ -130,7 +130,7 @@ tianshu-mcp visual rules approve TASK_ID REVIEW_ID DIGEST "用户确认的批准
       "cache": true
     },
     "contents": [
-      { "id": "logo-elements", "files": ["assets/logo.png"], "expect": "Logo 含蓝色齿轮图形与白色文字 TIANSHU" }
+      { "id": "logo-elements", "files": ["assets/logo.png"], "expect": "Logo 含蓝色齿轮图形与白色文字 AGENT_FOREMAN" }
     ],
     "pages": [
       { "id": "home", "source": { "type": "static", "root": "dist" }, "route": "/" },
@@ -193,7 +193,7 @@ tianshu-mcp visual rules approve TASK_ID REVIEW_ID DIGEST "用户确认的批准
   自动失效）、参数模板、cwd、已解析环境值摘要（不落明文）、`allowRemote`、`samples`、`minConfidence`。
   命令身份无法可靠计算时**不做缓存**。仅成功完成的判定入缓存，blocked 不入缓存；缓存只存期望文本摘要而非原文。
 - 缓存位置 `<taskDir>/visual-content-cache/`。命中缓存时不调用命令，结果标 `cached: true`。
-- 逃生门：`content.cache: false` 关闭；`tianshu-mcp visual content cache clear <taskId>` 清理。
+- 逃生门：`content.cache: false` 关闭；`agent-foreman-mcp visual content cache clear <taskId>` 清理。
 
 ### 原因码
 
@@ -237,7 +237,7 @@ tianshu-mcp visual rules approve TASK_ID REVIEW_ID DIGEST "用户确认的批准
 ### 验证自备命令
 
 ```sh
-tianshu-mcp visual content probe /path/to/project [ruleId]
+agent-foreman-mcp visual content probe /path/to/project [ruleId]
 ```
 
 按声明规则跑一次真实判定但**不写证据、不写缓存**，打印原始票型与命令解析结果，便于先确认命令可用、判定稳定。
@@ -248,8 +248,8 @@ tianshu-mcp visual content probe /path/to/project [ruleId]
 每轮目录为 `<home>/tasks/<taskId>/visual/<reportRound>`。自动、手动验收使用互斥轮次分配，保留历史。report Markdown/JSON 增加独立 visual，HTML 提供状态过滤、图片并排、透明叠加、指标与区域坐标，不使用 CDN。
 
 ```sh
-tianshu-mcp visual artifacts clean TASK_ID
-tianshu-mcp visual artifacts clean TASK_ID --apply
+agent-foreman-mcp visual artifacts clean TASK_ID
+agent-foreman-mcp visual artifacts clean TASK_ID --apply
 ```
 
 默认仅预览，apply 只删除指定任务的视觉目录，保留报告和清理标记，不删正式基准。超过预算时阻塞，不删除旧证据换取通过。CLI 在 MCP stdio 连接前分流。

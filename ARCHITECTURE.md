@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — tianshu-mcp 架构说明
+# ARCHITECTURE.md — agent-foreman-mcp 架构说明
 
 > 适用版本：`0.5.3`（2026-09-15）
 > 本文描述**系统结构与模块边界**，面向要改动本仓库的开发者。
@@ -9,7 +9,7 @@
 
 ## 1. 定位与系统上下文
 
-`tianshu-mcp` 是一个**被天枢（Tianshu）当作标准 MCP server 接入的编排层**。天枢是总指挥与用户交互面，本 server 承担三件事：
+`agent-foreman-mcp` 是一个**面向任意 MCP 宿主的通用编排层**。宿主（Claude Desktop / Cursor / ZCode / Cline / Windsurf / 任意 stdio 宿主）是总指挥与用户交互面，本 server 承担三件事：
 
 1. **调度**——任务队列、并发闸、状态机、超时与取消；
 2. **执行面**——把任务书送达外部 AI-Agent（Codex 桌面端 / TraeWork / ZCode / 任意 CLI）；
@@ -17,34 +17,35 @@
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ 天枢（Tianshu TUI × GUI）                                     │
-│   · 按次同步调用 tools/call，只消费 content[].text 与 isError  │
+│ MCP 宿主（Claude Desktop / Cursor / ZCode / Cline / …）        │
+│   · 按次调用 tools/call                                       │
+│   · 消费 content[].text + meta 块，或 structuredContent       │
 └───────────────────────────┬─────────────────────────────────┘
                             │ MCP over stdio（stdout 仅承载 JSON-RPC）
 ┌───────────────────────────▼─────────────────────────────────┐
-│ tianshu-mcp（本仓库）                                         │
+│ agent-foreman-mcp（本仓库）                                         │
 │   调度 ── 执行面 ── 验收仪                                    │
 └──────────┬──────────────────────────────┬───────────────────┘
            │                              │
    ┌───────▼────────┐            ┌────────▼─────────┐
    │ 外部 AI-Agent   │            │ 目标项目工作区     │
    │ GUI：CDP 驱动 UI│            │  git 仓库 + 测试  │
-   │ CLI：子进程      │            │  .tianshu-mcp/   │
+   │ CLI：子进程      │            │  .agent-foreman/   │
    └────────────────┘            └──────────────────┘
 ```
 
-### 1.1 四条硬约束，以及它们造成的架构后果
+### 1.1 硬约束，以及它们造成的架构后果
 
-本项目的形态不是自由设计的结果，而是四条**实测硬约束**逼出来的。改架构前必须先读这张表：
+本项目的形态不是自由设计的结果，而是若干条**实测硬约束**逼出来的。改架构前必须先读这张表：
 
 | # | 实测约束 | 架构后果 |
 |---|---|---|
-| C1 | 天枢的 MCP 工具**只回文本**：`content[]` 的 `text` 被拼成字符串，`isError` 透传 | 所有结果统一为「人类可读文本 + `---tianshu-mcp-meta---` JSON 块」；不依赖 resources / prompts（`src/mcp/formatter.ts`） |
-| C2 | 天枢**按次同步**调用 `tools/call` | 长任务必须异步化：`run_task` 秒回 `taskId`，用 `query_task` 轮询；无服务端推送 |
+| C1 | **源流约束**（tianshu-mcp 时期宿主限制）：当时的宿主对 MCP 工具**只回文本**——`content[]` 的 `text` 被拼成字符串，`isError` 透传 | 该限制在本项目**已由 structuredContent 双轨解除**：结果同时提供「人类可读文本 + `---agent-foreman-meta---` JSON 块」与 MCP 标准 `structuredContent`；仍不依赖 resources / prompts（`src/mcp/formatter.ts`）。保留文本块是为兼容只认文本的旧式宿主 |
+| C2 | **源流约束**（tianshu-mcp 时期宿主限制）：当时的宿主**按次同步**调用 `tools/call` | 长任务仍异步化：`run_task` 秒回 `taskId`，用 `query_task` 轮询；无服务端推送。这是通用做法，非某宿主特有约束 |
 | C3 | TraeWork 的 agent 请求在 TTNet 层 TDE 加密，无法在客户端外构造 | 唯一可行路径是 **CDP 驱动桌面 UI**，从 DOM 提取结果（`src/agents/traework/`） |
 | C4 | Codex 桌面端是 **MSIX 商店包**，GUI 宿主无法 `CreateProcess` 直启 | 必须经 `IApplicationActivationManager` COM 激活并注入专属 `--user-data-dir` 才能开 CDP 端口（`src/agents/codex/launcher.ts`） |
 
-ZCode 属于同类问题：无随包 headless CLI，故同样走 CDP（M2 已实测定论）。
+C3/C4 是 **agent 侧**约束（被驱动的桌面应用本身），与宿主无关，独立化后依然成立。ZCode 属于同类问题：无随包 headless CLI，故同样走 CDP。
 
 ---
 
@@ -84,9 +85,9 @@ node dist/index.js visual <cmd>   → 视觉验收 CLI 子命令族
                                    （在建立 stdio 连接之前分流，不占用协议流）
 ```
 
-- 数据目录由 `resolveDataHome()` 解析：环境变量 `TIANSHU_MCP_HOME` 优先，否则 `~/.tianshu-mcp`。
+- 数据目录由 `resolveDataHome()` 解析：环境变量 `AGENT_FOREMAN_HOME` 优先，否则 `~/.agent-foreman`。
 - 日志器初始化到 `<数据目录>/logs/`。
-- 技能自检安装可经 `--no-skill-install` 或 `TIANSHU_MCP_NO_SKILL_INSTALL=1` 关闭。
+- 技能自检安装可经 `--no-skill-install` 或 `AGENT_FOREMAN_NO_SKILL_INSTALL=1` 关闭。
 - 退出路径：`SIGINT` / `SIGTERM` / stdin EOF / stdin close → 归档活动任务并终止子进程 → `exit(0)`。
 
 ### 3.2 组装顺序（`src/server.ts`）
@@ -109,7 +110,7 @@ resolveDataHome → Logger → DataHome(BUILTIN_PROFILES) → init()
 ### 3.3 数据目录布局
 
 ```text
-<数据目录>/                       默认 ~/.tianshu-mcp
+<数据目录>/                       默认 ~/.agent-foreman
 ├── config.json                  server 配置（并发、超时、技能开关）
 ├── agent-profiles.json         用户自定义/覆盖的 agent profile
 ├── projects.json                项目登记表（含每项目验收配置）
@@ -135,7 +136,7 @@ resolveDataHome → Logger → DataHome(BUILTIN_PROFILES) → init()
 | `visual/<round>/<pageId>/<viewportId>/` | 视觉四联图：`actual/baseline/diff/regions.png` + `metrics.json` |
 | `visual-snapshot.json` | 任务期冻结的视觉规则快照 |
 
-项目侧产物：`<项目>/.tianshu-mcp/acceptance.json`（项目级验收配置）、`<项目>/tests/visual/baselines/...`（视觉基准）、codex 路径的 `<项目>/.zcode/plans/codex-fix-r<N>.md`（修复计划）。
+项目侧产物：`<项目>/.agent-foreman/acceptance.json`（项目级验收配置）、`<项目>/tests/visual/baselines/...`（视觉基准）、codex 路径的 `<项目>/.agent-foreman/plans/codex-fix-r<N>.md`（修复计划）。
 
 ---
 
@@ -157,14 +158,26 @@ resolveDataHome → Logger → DataHome(BUILTIN_PROFILES) → init()
 | `prepare_visual_baseline` | write | 是 | 生成基准候选与摘要（不落正式基准） |
 | `approve_visual_baseline` | write | 是 | 用户审阅后核对摘要并写入基准 |
 
-**返回契约**（`src/mcp/formatter.ts`）：人类可读正文 + 尾随元块，便于宿主正则抽取。
+**返回契约（双轨，`src/mcp/formatter.ts`）**：同一份 `MetaBlockFields` 对象**双投递**——
+
+1. **文本轨**：人类可读正文 + 尾随元块，便于只认文本的宿主正则抽取；
+2. **结构化轨**：MCP 标准 `structuredContent`，现代宿主直接消费结构化字段。
 
 ```text
 <人类可读文本>
----tianshu-mcp-meta---
+---agent-foreman-meta---
 { ...MetaBlockFields: taskId, status, ok, round, changedFiles, diffstat, ... }
----tianshu-mcp-meta---
+---agent-foreman-meta---
 ```
+
+```jsonc
+// 同一对象的另一条投递路径（structuredContent）
+{ "ok": true, "taskId": "tsk_…", "status": "succeeded", "round": 1, "message": "…" }
+```
+
+**契约纪律**：工具声明了宽松 `outputSchema`（`TOOL_OUTPUT_SHAPE`，字段全部可选 + `passthrough`），客户端会按其校验 `structuredContent`。因此**顶层对象必须稳定、字段只增不改不换名**——改名字段等于破坏已发布的返回契约。`META_BLOCK_FIELDS` 是字段名的单一事实来源，协议测试会断言 meta 块不出现未登记字段。视觉基准类工具返回自由结果对象，统一信封为 `{ ok, message, result }`；`get_task_report` 返回报告原文，结构化侧给出 `reportRound` 与 `reportFiles` 定位信息。
+
+**错误路径同样双轨**：`errorResult()` 统一产出 `{ ok: false, message }`（`src/server.ts` 的参数校验失败与 handler 异常两条直返都经它）。**注意区分**：*schema 级*非法参数由 SDK 在协议层拦截，返回 JSON-RPC 错误（`-32602`，协议上不可能携带 `structuredContent`）；而 handler 内抛出的语义错误走 `errorResult`，带完整 `structuredContent`。
 
 **参数校验是两段式的**：`server.ts` 先用 `inputSchema.safeParse()` 做协议级校验（失败回 `Error: 参数不合法 — <path>: <message>`）；handler 内再做语义闸门，例如 `projectPath` 安全校验（绝对路径 + 存在 + realpath 归一 + 拒绝主目录与根级/系统目录）、`mode` 仅 TraeWork 可用的拒绝、`allowCreateProject` 仅 ZCode 可用等。
 
@@ -261,7 +274,7 @@ GUI agent 的取消是**尽力而为且诚实回报**：Codex 经 CDP 点击界�
 
 | 路径 | 产物 | 反馈内容 |
 |---|---|---|
-| Codex | `<项目>/.zcode/plans/codex-fix-r<N>.md` | 从报告抽取失败证据拼进修复提示 |
+| Codex | `<项目>/.agent-foreman/plans/codex-fix-r<N>.md` | 从报告抽取失败证据拼进修复提示 |
 | 其他（含 CLI） | `<任务目录>/rework-<taskId>-r<round>.md` | 标题 + 计划路径 + `verifySummary` + 报告路径 |
 
 **关键设计点**：`hardFailure` 与「验收失败」被严格区分。前者是环境/认证/启动问题，进验收与返修毫无意义，直接终态失败；只有 agent 真正跑完才进入验收与返修记账。
@@ -276,7 +289,7 @@ GUI agent 的取消是**尽力而为且诚实回报**：Codex 经 CDP 点击界�
 
 ```text
 1. 基线       采集或复用 git 基线（verify_task 复用任务已存基线）
-2. 解析检查项  优先级：extraChecks > 项目 .tianshu-mcp/acceptance.json
+2. 解析检查项  优先级：extraChecks > 项目 .agent-foreman/acceptance.json
                         > projects.json 的 verify > 按项目类型推导的默认集
 3. 视觉快照   冻结 + 三轮核对（命令前 / 命令后 / 视觉后）；变动即 VISUAL_INTEGRITY
 4. git 检查   内置 git-diff-check（git diff --check，含基线到 HEAD 与工作区）
@@ -457,7 +470,7 @@ DOM 完成标志出现（"由AI生成" 等）                      → 判定完
 未启用时对既有行为零影响；启用后它是一条**独立于命令检查**的并行验收链路。
 
 ```text
-项目 .tianshu-mcp/acceptance.json 配 visual.enabled=true
+项目 .agent-foreman/acceptance.json 配 visual.enabled=true
   → run_task / verify_task 在命令检查之后追加视觉检查（不需要新工具）
   → 动工前冻结「视觉配置摘要 + 基准摘要」，每轮前后核对（变动即 VISUAL_INTEGRITY 阻塞）
   → 页面：三类来源（existing / command / static）+ 声明式步骤 + 稳定化采样 + 显式屏蔽
@@ -517,7 +530,7 @@ CLI 子命令族（`node dist/index.js visual ...`）：`init`（写入禁用的
 | server 配置 | `<数据目录>/config.json` | `concurrency.maxRunning`(2)、`defaultTaskTimeoutMs`(30min)、`verifyCommandTimeoutMs`(5min)、`verifyConcurrency`(2, 1..4)、`skills.autoInstall`(true) |
 | agent profile | `<数据目录>/agent-profiles.json` | 按 key **整键覆盖**内置 profile |
 | 项目登记 | `<数据目录>/projects.json` | 含每项目 `verify[]` 验收记录 |
-| 项目验收 | `<项目>/.tianshu-mcp/acceptance.json` | `checks[]`、`visual`、`requireChanges`(true)、`verifyConcurrency` |
+| 项目验收 | `<项目>/.agent-foreman/acceptance.json` | `checks[]`、`visual`、`requireChanges`(true)、`verifyConcurrency` |
 
 任务超时的解析链：调用参数 `taskTimeoutMs` > profile `timeoutMs` > `defaultTaskTimeoutMs` > 30 分钟，在提交时冻结。
 
@@ -603,7 +616,7 @@ CLI 子命令族（`node dist/index.js visual ...`）：`init`（写入禁用的
 |---|---|
 | 新增 MCP 工具 | `src/mcp/tools.ts` 增元数据 + `src/mcp/handlers.ts` 增实现 + `src/config/schema.ts` 增入参 schema |
 | 新增验收检查来源 | `src/verify/acceptance.ts` 的 `resolveChecks()` 优先级链 |
-| 项目级验收规则 | 项目内 `.tianshu-mcp/acceptance.json`（无需改代码） |
+| 项目级验收规则 | 项目内 `.agent-foreman/acceptance.json`（无需改代码） |
 | UI 选择器随客户端升级漂移 | profile `gui.selectors` 覆盖（无需改代码） |
 | 新增视觉用例类型 | `src/visual/schema.ts` + `engine.ts` 任务构建 |
 
@@ -625,14 +638,14 @@ CLI 子命令族（`node dist/index.js visual ...`）：`init`（写入禁用的
 
 1. `test/fake-cdp.ts` 里助手回复必须**同步追加**，不要改回定时器——轮询间隔小 + `stableRounds` 低时定时器会与稳定兜底抢跑。
 2. 集成测试必须**隔离原生对话框枚举**：`depsFor` 的默认 `listDialogs` 桩不可省，否则会触达真实 `listOwnedDialogs`，其 darwin 分支 fail-closed，在无授权的 runner 上直接抛错。
-3. 真实浏览器用例默认 `skipIf(TIANSHU_VISUAL_BROWSER_TEST !== "1")`；CI 的 `visual-browser` 作业显式开户。
+3. 真实浏览器用例默认 `skipIf(AGENT_FOREMAN_VISUAL_BROWSER_TEST !== "1")`；CI 的 `visual-browser` 作业显式开户。
 
 ### 14.3 CI / 发布
 
 | 工作流 | 触发 | 内容 |
 |---|---|---|
 | `ci.yml` | push / PR 到 master 与 main | `build-test`（ubuntu / windows / macos × Node 20/22/24）、`pack-check`、`visual-browser`（ubuntu / windows / macos-15-intel / macos-15 × Node 20/22/24，真实浏览器） |
-| `release.yml` | 推 `v*` tag | 跑完整门禁 → 校验 tag 版本 === `package.json` 版本 → 要求同 SHA 的成功 CI → 双语正文（`docs/release-v<ver>.md` + `.en.md`，**缺文档直接失败**）→ 发 GitHub Release 并附 tgz → 经 `scripts/gitee-release.mjs` 幂等补建 Gitee 发行版 |
+| `release.yml` | 推 `v*` tag | 跑完整门禁 → 校验 tag 版本 === `package.json` 版本 → 要求同 SHA 的成功 CI → 双语正文（`docs/release-v<ver>.md` + `.en.md`，**缺文档直接失败**）→ 发 GitHub Release 并附 tgz |
 
 版本号三处必须同步：`package.json`、`package-lock.json`、`src/version.generated.ts`（后者由 `scripts/sync-version.mjs` 在每次 build 前从 `package.json` 生成，**勿手改**）。
 
@@ -657,7 +670,7 @@ CLI 子命令族（`node dist/index.js visual ...`）：`init`（写入禁用的
 
 | 主题 | 文档 |
 |---|---|
-| 安装、接入天枢、工具用法 | [README.md](README.md) / [README.en.md](README.en.md) |
+| 安装、宿主接入、工具用法 | [README.md](README.md) / [README.en.md](README.en.md) / [宿主接入指南](docs/host-integration.md) |
 | 交接状态、排障手册、踩坑记录 | [HANDOFF.md](HANDOFF.md) |
 | TraeWork GUI 驱动细节 | [docs/traework-cdp.md](docs/traework-cdp.md) |
 | Codex 桌面端 GUI 驱动细节 | [docs/codex-gui-cdp.md](docs/codex-gui-cdp.md) |

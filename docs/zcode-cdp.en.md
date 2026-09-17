@@ -42,7 +42,7 @@ npm run smoke:zcode -- --confirm-send --model DeepSeek/deepseek-flash --project 
 ```text
 run_task(projectPath=D:/repo/app, agentId=zcode,
   model=DeepSeek/deepseek-flash,
-  task=Implement the plan in `.codex/plans/feature.md` and `./design-system`,
+  task=Implement the plan in `docs/plans/feature.md` and `./design-system`,
   autoVerify=true)
 ```
 
@@ -102,13 +102,12 @@ ZCode-only optional boolean; it affects **project mode** only:
 
 Each poll samples the Stop button, loading card, active tool, last assistant hash, question UI, composer, and Send button. Any authoritative running signal keeps the task running. Progress summaries are persisted every 30 seconds.
 
-After completion, the shared acceptance engine runs. A failed round writes one plan to `<TIANSHU_MCP_HOME>/tasks/<taskId>/rework-<taskId>-r<round>.md`; no temporary project copy is created. The repair prompt carries absolute plan and report paths and resumes the same session. Exhausted rounds end in `needs_attention`.
+After completion, the shared acceptance engine runs. A failed round writes one plan to `<AGENT_FOREMAN_HOME>/tasks/<taskId>/rework-<taskId>-r<round>.md`; no temporary project copy is created. The repair prompt carries absolute plan and report paths and resumes the same session. Exhausted rounds end in `needs_attention`.
 
 ## Hardware evidence (2026-09-11)
 
 | Platform | Verified | Pending |
 |---|---|---|
-| Windows 10 x64 | Discovery of `D:\Z-Code\ZCode\ZCode.exe`, version `3.11.2.6792`, non-CDP instance protection, CDP startup, native folder import and full-path readback, display/internal-ID readback for `DeepSeek/deepseek-flash`, Full Access readback, real file development with 2/2 acceptance, same-session repair after a controlled first-round failure, and a same-session `AskUserQuestion → needs_user → continue_task(PASS)` run with 2/2 acceptance | None; see the [Windows hardware acceptance record](zcode-windows-smoke.en.md) |
 | macOS | Cross-platform implementation and CI/mock coverage | Real installation, Accessibility, and full end-to-end evidence |
 
 The Windows loop is complete. The built-in profile must remain `research` until the macOS hardware evidence is complete.

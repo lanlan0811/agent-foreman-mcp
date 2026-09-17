@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — tianshu-mcp Architecture
+# ARCHITECTURE.md — agent-foreman-mcp Architecture
 
 > Applies to version `0.5.3` (2026-09-15).
 > This document describes the **system structure and module boundaries** for developers who will modify this repository.
@@ -9,7 +9,7 @@
 
 ## 1. Positioning and system context
 
-`tianshu-mcp` is an **orchestration layer that Tianshu consumes as a standard MCP server**. Tianshu is the commander and the user-facing surface; this server owns three things:
+`agent-foreman-mcp` is a **general-purpose orchestration layer for any MCP host**. The host (Claude Desktop / Cursor / ZCode / Cline / Windsurf / any stdio host) is the commander and the user-facing surface; this server owns three things:
 
 1. **Scheduling** — task queue, concurrency gate, state machine, timeouts, cancellation.
 2. **Execution surface** — delivering the task brief to an external AI agent (Codex desktop, TraeWork, ZCode, or any CLI).
@@ -17,36 +17,36 @@
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ Tianshu (TUI × GUI)                                          │
-│   · Calls tools/call synchronously, one call at a time,      │
-│     consuming only content[].text and isError                │
+│ MCP host (Claude Desktop / Cursor / ZCode / Cline / …)       │
+│   · Calls tools/call per request                             │
+│   · Consumes content[].text + meta block, or structuredContent│
 └───────────────────────────┬─────────────────────────────────┘
                             │ MCP over stdio (stdout carries JSON-RPC only)
 ┌───────────────────────────▼─────────────────────────────────┐
-│ tianshu-mcp (this repository)                                │
+│ agent-foreman-mcp (this repository)                                │
 │   scheduling ── execution surface ── acceptance instrument   │
 └──────────┬──────────────────────────────┬───────────────────┘
            │                              │
    ┌───────▼────────┐            ┌────────▼─────────┐
    │ External agent  │            │ Target workspace │
    │ GUI: drive UI   │            │ git repo + tests │
-   │      over CDP   │            │ .tianshu-mcp/    │
+   │      over CDP   │            │ .agent-foreman/    │
    │ CLI: subprocess │            └──────────────────┘
    └────────────────┘
 ```
 
-### 1.1 Four hard constraints and the architecture they forced
+### 1.1 Hard constraints and the architecture they forced
 
-This project's shape is not a free design choice — it was forced by four **measured constraints**. Read this table before changing the architecture:
+This project's shape is not a free design choice — it was forced by several **measured constraints**. Read this table before changing the architecture:
 
 | # | Measured constraint | Architectural consequence |
 |---|---|---|
-| C1 | Tianshu's MCP tool call **returns text only**: `content[]` `text` items are concatenated and `isError` passes through | Every result is "human-readable text + a `---tianshu-mcp-meta---` JSON block"; no resources or prompts (`src/mcp/formatter.ts`) |
-| C2 | Tianshu calls `tools/call` **synchronously, per call** | Long tasks must be async: `run_task` returns a `taskId` immediately and `query_task` polls. There is no server push |
+| C1 | **Inherited constraint** (host limitation during the tianshu-mcp era): that host **returned text only** for MCP tools — `content[]` `text` items were concatenated and `isError` passed through | This limitation is **resolved here by the structuredContent dual track**: results carry both "human-readable text + a `---agent-foreman-meta---` JSON block" and the MCP-standard `structuredContent`. Resources and prompts are still unused (`src/mcp/formatter.ts`). The text block is kept for legacy text-only hosts |
+| C2 | **Inherited constraint** (host limitation during the tianshu-mcp era): that host called `tools/call` **synchronously, per call** | Long tasks stay async: `run_task` returns a `taskId` immediately and `query_task` polls. There is no server push — a general practice, not a host-specific constraint |
 | C3 | TraeWork agent requests are TDE-encrypted at the TTNet layer and cannot be constructed outside the client | The only viable path is **driving the desktop UI over CDP** and extracting results from the DOM (`src/agents/traework/`) |
 | C4 | The Codex desktop app is an **MSIX store package**; a GUI host cannot `CreateProcess` it directly | It must be activated through `IApplicationActivationManager` COM with an injected dedicated `--user-data-dir` before a CDP port opens (`src/agents/codex/launcher.ts`) |
 
-ZCode falls into the same class: it ships no headless CLI, so it is also CDP-driven (settled by measurement in M2).
+C3/C4 are **agent-side** constraints (properties of the driven desktop apps), independent of the host, and they still hold after the split. ZCode falls into the same class: it ships no headless CLI, so it is also CDP-driven.
 
 ---
 
@@ -93,9 +93,9 @@ node dist/index.js visual <cmd>   → visual acceptance CLI subcommands
                                      so it never occupies the protocol stream)
 ```
 
-- The data home is resolved by `resolveDataHome()`: env `TIANSHU_MCP_HOME` wins, otherwise `~/.tianshu-mcp`.
+- The data home is resolved by `resolveDataHome()`: env `AGENT_FOREMAN_HOME` wins, otherwise `~/.agent-foreman`.
 - The logger initializes to `<data home>/logs/`.
-- Skill self-install can be disabled with `--no-skill-install` or `TIANSHU_MCP_NO_SKILL_INSTALL=1`.
+- Skill self-install can be disabled with `--no-skill-install` or `AGENT_FOREMAN_NO_SKILL_INSTALL=1`.
 - Shutdown path: `SIGINT` / `SIGTERM` / stdin EOF / stdin close → archive active tasks and terminate child processes → `exit(0)`.
 
 ### 3.2 Assembly order (`src/server.ts`)
@@ -118,7 +118,7 @@ Tool registration is **data-driven**: it walks `TOOL_DEFS`, looks up each name i
 ### 3.3 Data home layout
 
 ```text
-<data home>/                      default ~/.tianshu-mcp
+<data home>/                      default ~/.agent-foreman
 ├── config.json                   server config (concurrency, timeouts, skills)
 ├── agent-profiles.json           user-defined / overriding agent profiles
 ├── projects.json                 project registry (incl. per-project verify config)
@@ -144,7 +144,7 @@ Per-task directory (`src/tasks/task-store.ts`):
 | `visual/<round>/<pageId>/<viewportId>/` | Visual quadruple: `actual/baseline/diff/regions.png` + `metrics.json` |
 | `visual-snapshot.json` | Visual rules snapshot frozen for the task's duration |
 
-Project-side artifacts: `<project>/.tianshu-mcp/acceptance.json` (project-level acceptance config), `<project>/tests/visual/baselines/...` (visual baselines), and for the Codex path `<project>/.zcode/plans/codex-fix-r<N>.md` (repair plan).
+Project-side artifacts: `<project>/.agent-foreman/acceptance.json` (project-level acceptance config), `<project>/tests/visual/baselines/...` (visual baselines), and for the Codex path `<project>/.agent-foreman/plans/codex-fix-r<N>.md` (repair plan).
 
 ---
 
@@ -166,13 +166,25 @@ Eleven tools (`src/mcp/tools.ts`), split into read and write families:
 | `prepare_visual_baseline` | write | yes | Produce a baseline candidate and digest (does not adopt a baseline) |
 | `approve_visual_baseline` | write | yes | After user review, check the digest and write the baseline |
 
-**Return contract** (`src/mcp/formatter.ts`): human-readable body plus a trailing meta block the host can extract with a regex.
+**Return contract (dual track, `src/mcp/formatter.ts`)**: the same `MetaBlockFields` object is delivered twice —
+
+1. **Text track**: a human-readable body plus a trailing meta block for hosts that only read text;
+2. **Structured track**: the MCP-standard `structuredContent` for modern hosts that consume structured fields directly.
+
+```jsonc
+// the same object on its second delivery path (structuredContent)
+{ "ok": true, "taskId": "tsk_…", "status": "succeeded", "round": 1, "message": "…" }
+```
+
+**Contract discipline**: tools declare a loose `outputSchema` (`TOOL_OUTPUT_SHAPE`, all fields optional with passthrough) and clients validate `structuredContent` against it. The **top-level object must therefore stay stable and its fields may only be added, never renamed or removed** — renaming a field breaks an already-published return contract. `META_BLOCK_FIELDS` is the single source of truth for field names, and protocol tests assert that no unregistered field appears in the meta block. Visual-baseline tools return a free-form result wrapped in the envelope `{ ok, message, result }`; `get_task_report` returns the report text and supplies `reportRound` / `reportFiles` on the structured side.
+
+**Error paths are dual-track too**: `errorResult()` uniformly produces `{ ok: false, message }` (both direct returns in `src/server.ts` — argument-validation failure and handler exception — go through it). **Note the distinction**: *schema-level* invalid arguments are rejected by the SDK at the protocol layer as a JSON-RPC error (`-32602`, which structurally cannot carry `structuredContent`), whereas semantic errors thrown inside a handler go through `errorResult` and do carry full `structuredContent`.
 
 ```text
 <human-readable text>
----tianshu-mcp-meta---
+---agent-foreman-meta---
 { ...MetaBlockFields: taskId, status, ok, round, changedFiles, diffstat, ... }
----tianshu-mcp-meta---
+---agent-foreman-meta---
 ```
 
 **Validation happens in two stages**: `server.ts` first runs `inputSchema.safeParse()` for protocol-level validation (failures return `Error: 参数不合法 — <path>: <message>`); handlers then apply semantic gates, such as the `projectPath` safety check (absolute, exists, realpath-normalized, rejecting the home directory and root-level/system directories), rejecting `mode` for anything but TraeWork, and allowing `allowCreateProject` only for ZCode.
@@ -270,7 +282,7 @@ Start
 
 | Path | Artifact | Feedback content |
 |---|---|---|
-| Codex | `<project>/.zcode/plans/codex-fix-r<N>.md` | Failure evidence extracted from the report, embedded in the fix prompt |
+| Codex | `<project>/.agent-foreman/plans/codex-fix-r<N>.md` | Failure evidence extracted from the report, embedded in the fix prompt |
 | Others (incl. CLI) | `<task dir>/rework-<taskId>-r<round>.md` | Heading + plan path + `verifySummary` + report path |
 
 **Key design point**: `hardFailure` and "verification failure" are strictly distinguished. The former means environment, auth, or startup problems, for which verification and rework are pointless — the task goes straight to a failed terminal state. Only a genuinely finished agent run enters verification and round accounting.
@@ -285,7 +297,7 @@ Start
 
 ```text
 1. Baseline    capture or reuse a git baseline (verify_task reuses the task's stored baseline)
-2. Resolve checks  priority: extraChecks > project .tianshu-mcp/acceptance.json
+2. Resolve checks  priority: extraChecks > project .agent-foreman/acceptance.json
                             > projects.json verify > derived defaults by project type
 3. Visual snapshot freeze + three-way check (before commands, after commands, after visual);
                    any change raises VISUAL_INTEGRITY
@@ -472,7 +484,7 @@ Idle for idleTimeoutMs (default 10 min)                               → idle_t
 When disabled it has zero effect on existing behavior; when enabled it is an acceptance path **independent of command checks**.
 
 ```text
-Project .tianshu-mcp/acceptance.json sets visual.enabled=true
+Project .agent-foreman/acceptance.json sets visual.enabled=true
   → run_task / verify_task append visual checks after command checks (no new tool needed)
   → before work starts, freeze "visual config digest + baseline digest" and re-check each round
     (any change raises VISUAL_INTEGRITY, a blocker)
@@ -539,7 +551,7 @@ CLI subcommands (`node dist/index.js visual ...`): `init` (writes a disabled tem
 | Server config | `<data home>/config.json` | `concurrency.maxRunning` (2), `defaultTaskTimeoutMs` (30 min), `verifyCommandTimeoutMs` (5 min), `verifyConcurrency` (2, 1..4), `skills.autoInstall` (true) |
 | Agent profiles | `<data home>/agent-profiles.json` | **Whole-key override** of built-in profiles |
 | Project registry | `<data home>/projects.json` | Includes each project's `verify[]` records |
-| Project acceptance | `<project>/.tianshu-mcp/acceptance.json` | `checks[]`, `visual`, `requireChanges` (true), `verifyConcurrency` |
+| Project acceptance | `<project>/.agent-foreman/acceptance.json` | `checks[]`, `visual`, `requireChanges` (true), `verifyConcurrency` |
 
 Task timeout resolution: call argument `taskTimeoutMs` > profile `timeoutMs` > `defaultTaskTimeoutMs` > 30 minutes, frozen at submit time.
 
@@ -625,7 +637,7 @@ This requires a new adapter directory implementing `AgentAdapter` with `run()` a
 |---|---|
 | Add an MCP tool | Add metadata in `src/mcp/tools.ts` + implementation in `src/mcp/handlers.ts` + an input schema in `src/config/schema.ts` |
 | Add an acceptance check source | The `resolveChecks()` precedence chain in `src/verify/acceptance.ts` |
-| Project-level acceptance rules | The project's `.tianshu-mcp/acceptance.json` (no code change) |
+| Project-level acceptance rules | The project's `.agent-foreman/acceptance.json` (no code change) |
 | A selector drifting with a client upgrade | Profile `gui.selectors` override (no code change) |
 | A new visual case type | `src/visual/schema.ts` + job construction in `engine.ts` |
 
@@ -647,14 +659,14 @@ This requires a new adapter directory implementing `AgentAdapter` with `run()` a
 
 1. Assistant replies in `test/fake-cdp.ts` must be **appended synchronously**; do not revert to a timer — with a short poll interval and a low `stableRounds`, a timer races the stability fallback.
 2. Integration tests must **isolate native dialog enumeration**: the default `listDialogs` stub in `depsFor` is not optional, or tests reach the real `listOwnedDialogs`, whose darwin branch fails closed and throws on runners without the required authorization.
-3. Real-browser cases default to `skipIf(TIANSHU_VISUAL_BROWSER_TEST !== "1")`; CI's `visual-browser` job opts in explicitly.
+3. Real-browser cases default to `skipIf(AGENT_FOREMAN_VISUAL_BROWSER_TEST !== "1")`; CI's `visual-browser` job opts in explicitly.
 
 ### 14.3 CI and release
 
 | Workflow | Trigger | Contents |
 |---|---|---|
 | `ci.yml` | Push / PR to master and main | `build-test` (ubuntu / windows / macos × Node 20/22/24), `pack-check`, `visual-browser` (ubuntu / windows / macos-15-intel / macos-15 × Node 20/22/24, real browser) |
-| `release.yml` | Push of a `v*` tag | Full gate → verify tag version === `package.json` version → require a successful CI run for the same SHA → bilingual body (`docs/release-v<ver>.md` + `.en.md`; **a missing document fails the run**) → publish the GitHub Release with the tgz attached → idempotently create the Gitee release via `scripts/gitee-release.mjs` |
+| `release.yml` | Push of a `v*` tag | Full gate → verify tag version === `package.json` version → require a successful CI run for the same SHA → bilingual body (`docs/release-v<ver>.md` + `.en.md`; **a missing document fails the run**) → publish the GitHub Release with the tgz attached |
 
 Three places must agree on the version: `package.json`, `package-lock.json`, and `src/version.generated.ts` (the last is generated from `package.json` by `scripts/sync-version.mjs` before every build — **do not edit it by hand**).
 
@@ -679,7 +691,7 @@ Ordered by impact on a successor:
 
 | Topic | Document |
 |---|---|
-| Install, Tianshu integration, tool usage | [README.md](README.md) / [README.en.md](README.en.md) |
+| Install, host integration, tool usage | [README.md](README.md) / [README.en.md](README.en.md) / [Host Integration Guide](docs/host-integration.en.md) |
 | Handover status, troubleshooting, lessons learned | [HANDOFF.md](HANDOFF.md) |
 | TraeWork GUI driver details | [docs/traework-cdp.md](docs/traework-cdp.md) |
 | Codex desktop GUI driver details | [docs/codex-gui-cdp.md](docs/codex-gui-cdp.md) |

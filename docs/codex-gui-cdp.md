@@ -1,11 +1,10 @@
 # Codex 桌面端 GUI 驱动（codex-gui-cdp.md）
 
-tianshu-mcp 的 Codex 适配器：驱动 OpenAI Codex 桌面端（ChatGPT 桌面应用）完成「定位安装 → 启动 GUI → 绑定/新建项目 → 选模型与思考等级 → 发指令开发 → 运行检测 → 验收 → 返修」全流程。
+agent-foreman-mcp 的 Codex 适配器：驱动 OpenAI Codex 桌面端（ChatGPT 桌面应用）完成「定位安装 → 启动 GUI → 绑定/新建项目 → 选模型与思考等级 → 发指令开发 → 运行检测 → 验收 → 返修」全流程。
 
 - 实现：`src/agents/codex/**`
-- 计划：`.zcode/plans/codex-gui-adapter-plan.md`
+- 计划：`.agent-foreman/plans/codex-gui-adapter-plan.md`
 - 状态：Windows 已真机验证；macOS 基本闭环已真机验证（2026-09-13，未发布），取消/返修矩阵补齐前标 `research`
-- 真机验收记录：[codex-windows-smoke.md](codex-windows-smoke.md)（Windows）、§14（macOS）
 - 关联：[adapter-matrix.md](adapter-matrix.md)、[agent-profiles.md](agent-profiles.md)、[acceptance-config.md](acceptance-config.md)
 
 ---
@@ -39,8 +38,8 @@ CDP 调试端口只有在**专属 user-data-dir** 下才会开启：
 
 独立 profile **不丢数据**：项目列表、会话、登录态存于 `~/.codex/`（`.codex-global-state.json`、`config.toml`、`auth.json`），跨 profile 共享。受管实例默认 profile 目录：
 
-- Windows：`%LOCALAPPDATA%\tianshu-mcp\codex-gui\profile`
-- macOS：`~/.tianshu-mcp/codex-gui/profile`
+- Windows：`%LOCALAPPDATA%\agent-foreman-mcp\codex-gui\profile`
+- macOS：`~/.agent-foreman/codex-gui/profile`
 
 ## 3. 安装发现
 
@@ -132,7 +131,7 @@ CDP 调试端口只有在**专属 user-data-dir** 下才会开启：
   1. **优先自动登记**（`src/agents/codex/registry.ts`，推荐、确定性）：直接把目标目录写入 Codex 的
      项目状态 `~/.codex/.codex-global-state.json` 的 `local-projects` + `project-order`，
      等价于用户在 Codex 里手动建过一次项目。约束：**幂等**（已登记则不动）、写入前**备份**
-     （`.tianshu-mcp-backup.json`，不覆盖已有备份）、**原子写**、只改这两个键、并且只在
+     （`.agent-foreman-backup.json`，不覆盖已有备份）、**原子写**、只改这两个键、并且只在
      **本 MCP 受管实例停止**时写（避免运行中的 Codex 覆盖）；绝不触碰用户手动打开的默认实例。
      非 Windows / 状态文件缺失或不可解析 → 返回 `skipped`，自动回退到第 2 级。
   2. **界面新建**（回退路径，对齐截图流程）：点项目选择触发器 → 「新建项目」→ 点「源文件夹」
@@ -173,7 +172,6 @@ CDP 调试端口只有在**专属 user-data-dir** 下才会开启：
 1. **停止按钮为权威运行信号**：出现即 `running`，绝不在此时判完成。
 2. **文本稳定仅在曾观测到运行信号后才作为完成证据**——避免停止钮选择器漂移时，
    把「其实还在生成、只是 DOM 恰好静止」误判为完成（这是 TraeWork 早期误判的教训，见
-   [traework-task-liveness-plan](../.zcode/plans/traework-task-liveness-plan.md)）。
 3. 若**始终未观测到**运行信号 → 不判完成，转入空闲计时，最终 `idle_timeout`：
    结束本轮但**不终止实例**（失败开放，不比现状更糟）。
 4. 总超时 `taskTimeoutMs`（默认 30 分钟）+ 空闲超时 `idleTimeoutMs`（默认 10 分钟）。
@@ -185,11 +183,11 @@ CDP 调试端口只有在**专属 user-data-dir** 下才会开启：
 ## 9. 验收与返修
 
 - **验收（决策 9/20）**：复用既有 `AcceptanceEngine`（`src/verify/acceptance.ts`），
-  优先级 `extraChecks` > 项目 `.tianshu-mcp/acceptance.json` > `projects.json` 补录 > **默认集**；
+  优先级 `extraChecks` > 项目 `.agent-foreman/acceptance.json` > `projects.json` 补录 > **默认集**；
   默认集读 `package.json` 的 `scripts` 推导 `typecheck/lint/test/build`。
   无可执行命令 → 标注为**弱验收**（`src/agents/codex/verify.ts`）。
 - **修复计划（决策 11/12）**：验收不通过时由 **MCP 自动生成**计划文档，落在**项目内**
-  `gui.fixPlanDir`（默认 `.zcode/plans/`），文件名为 `codex-fix-r<N>.md`（**含轮次号、每轮独立、不覆盖**）。
+  `gui.fixPlanDir`（默认 `.agent-foreman/plans/`），文件名为 `codex-fix-r<N>.md`（**含轮次号、每轮独立、不覆盖**）。
   因文件名在发送前已知，可直接写进修复指令，无需从回复回读。
 - **返修循环（决策 10）**：最多 `autoFixRounds` 轮（Codex 默认 **5**）；每轮向**同一会话**发送修复指令
   （引用该 md + 失败命令原始输出），再验收。轮次用尽 → `needs_attention`。
@@ -221,10 +219,10 @@ CDP 调试端口只有在**专属 user-data-dir** 下才会开启：
   },
   "gui": {
     "activation": "msix-com",                          // 必须：COM 激活
-    "userDataDir": "{LOCALAPPDATA}/tianshu-mcp/codex-gui/profile",  // 必须：专属 profile
+    "userDataDir": "{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile",  // 必须：专属 profile
     "cdpPort": 9333, "cdpPortAuto": true,
     "permissionMode": "完全访问",
-    "fixPlanDir": ".zcode/plans",
+    "fixPlanDir": ".agent-foreman/plans",
     "defaultAutoFixRounds": 5,
     "launchTimeoutMs": 60000, "pollIntervalMs": 3000,
     "stableRounds": 4, "idleTimeoutMs": 600000,
@@ -290,19 +288,3 @@ macOS 无 MSIX，`activation=spawn`（profile 按平台给默认值）：直接 
 5. **首次消息排队**：受管 profile 首次发送曾排队约 4.5 分钟（疑似首启环境初始化），
    输入框显示 queued 状态；第二次起发送即时（输入清空 + stop_button 立现）。
 
-### 验证记录（run_task 全闭环）
-
-| 步骤 | 结果 |
-|---|---|
-| 发现（默认目录注入） | ✓ `/Applications/ChatGPT.app/Contents/MacOS/ChatGPT`（`source=macos`） |
-| 登记（darwin 直写状态文件） | ✓ `performed`；第二轮 `already` 命中 |
-| spawn + CDP 就绪 | ✓ 端口 2s 内监听，`app://-/index.html` |
-| 静息选择器 | ✓ chatInput/sendButton/newChat/addProject/projectPickerTrigger/modelTrigger/permissionTrigger/messageArea 等 11 键全命中 |
-| 项目绑定 + 模型（5.6 Luna/中）+ 权限（完全访问）回读 | ✓ |
-| 发送→运行证据→完成 | ✓ `stop_button` 证据 → `reply_stable`（第二轮 40s） |
-| 自动验收（git-diff-check + 代码分析） | ✓ PASS（diffstat +2 -0） |
-| 终态 | ✓ `succeeded` |
-| 实例驻留 | ✓ server 退出后受管实例存活，下一轮直接复用 |
-
-未覆盖（保持 `research` 的原因）：`cancel_task` 真停 GUI、`rework_task` 同会话返修、
-`continue_task`（needs_user 恢复）、新建项目（不经状态文件的 UI 路径）。

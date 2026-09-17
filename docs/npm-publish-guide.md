@@ -1,91 +1,95 @@
-# npm 发布教程（如何提供 token 并完成 DoD #7）
+# npm 发布指南（npm-publish-guide.md）
 
-本仓库 `tianshu-mcp`（v0.1.1）已通过全部本地门禁与三平台 CI，`npm pack` 产物验证可安装、可作为 MCP server 被拉起。只差**发布到 npmjs registry** 这一动作（需要你的账号凭据）。以下是你（或任何有 npmjs 账号的人）可执行的步骤；发布后我即可补 `npx -y tianshu-mcp` 拉起连通证据。
+本仓库 `agent-foreman-mcp` 的发布流程。**发布动作需要 npm 凭据，由维护者执行**；本文档记录完整步骤与核验口径，确保任一次发布都可复现。
 
-## 方式 A：命令行一次性登录（推荐，最简单）
+## 0. 前置门禁（缺一不可）
 
-在**本项目机器**的任意终端执行：
+发布前必须在目标提交上跑通全部本地门禁：
+
+```bash
+npm ci
+npm run typecheck && npm run lint && npm test && npm run build
+npm run check:stdio      # stdout 只允许 MCP 协议消息
+npm run pack:check       # 产物内容核对
+```
+
+并且该提交在 CI 上三平台（ubuntu / windows / macOS × Node 20/22/24）全绿——`release.yml` 会强制要求**同一提交存在成功 CI**，否则拒绝发布。
+
+## 1. 版本号
+
+发布版本以 `package.json` 的 `version` 为**单一事实来源**，三处必须一致：
+
+| 位置 | 说明 |
+|---|---|
+| `package.json` | 手工修改 |
+| `package-lock.json` | `npm install --package-lock-only` 刷新 |
+| `src/version.generated.ts` | **勿手改**，`npm run build` 时由 `scripts/sync-version.mjs` 自动生成 |
+
+## 2. 凭据（二选一）
+
+### 方式 A：命令行登录
 
 ```bash
 npm login --registry=https://registry.npmjs.org
 ```
 
-按提示输入 npmjs 用户名 / 密码 / 邮箱 + **一次性验证码**（npm 会发到你账号邮箱或 Authenticator）。成功后 `~/.npmrc` 会写入 `//registry.npmjs.org/:_authToken=…`。
+按提示输入用户名 / 密码 / 邮箱 + 一次性验证码，成功后 `~/.npmrc` 写入 `_authToken`。
 
-> 注意：本机 `~/.npmrc` 现在写着 `registry=https://registry.npmmirror.com`。`npm login` 指定 `--registry` 会把登录写入 npmjs 段，不冲突。**发布时务必带 `--registry=https://registry.npmjs.org`**。
+> 若本机 `~/.npmrc` 指向镜像 registry（如 npmmirror），`npm login --registry` 会把登录写入 npmjs 段、互不冲突。**但发布时必须显式带 `--registry=https://registry.npmjs.org`**（镜像只读）。
 
-## 方式 B：生成 Access Token（适合不想存密码）
+### 方式 B：Granular Access Token
 
-1. 打开 https://www.npmjs.com → 登录 → 右上角头像 → **Access Tokens** → **Generate New Token**。
+1. https://www.npmjs.com → 头像 → **Access Tokens** → **Generate New Token**。
 2. 类型选 **Granular** 或 **Publish**（仅发布权限足够）。
-3. 复制生成的 `npm_xxxx` token，然后在本机：
-   ```bash
-   # 临时会话使用（不落盘）：
-   export NODE_AUTH_TOKEN=npm_xxxx
-   npm publish --registry=https://registry.npmjs.org
-   # 或写入 ~/.npmrc：
-   # //registry.npmjs.org/:_authToken=npm_xxxx
-   ```
-
-## 发布命令（token 就绪后）
+3. 使用（不落盘）：
 
 ```bash
-cd D:\Trae项目\tianshu-mcp
-npm run typecheck && npm run lint && npm test && npm run build   # 门禁
+export NODE_AUTH_TOKEN=npm_xxxx          # Windows PowerShell: $env:NODE_AUTH_TOKEN="npm_xxxx"
 npm publish --registry=https://registry.npmjs.org --access public
 ```
 
-- 包名 `tianshu-mcp` 已在 npmjs 确认**未被占用**，无需回退 `tianshu-dev-agents-mcp`。
-- 发布版本 = `package.json` 的 `0.1.1`（与 git tag `v0.1.1`、Release draft 一致）。
-
-## 发布后需要补的证据（DoD #7 收尾）
-
-把 token 配置好告诉我（或你直接执行上面命令后告诉我），我会执行并留存：
+## 3. 发布
 
 ```bash
-# 1) registry 可查到正确版本
-npm view tianshu-mcp version --registry=https://registry.npmjs.org
-# 2) 全新临时目录 npx 拉起并做协议冒烟
-mkdir /tmp/npx-smoke && cd /tmp/npx-smoke
-npx -y tianshu-mcp   # 由官方 SDK client 连上 → initialize → tools/list(8) → get_profiles
+npm publish --registry=https://registry.npmjs.org --access public
 ```
 
-## 常见问题
+## 4. 发布后核验（必须逐条留存）
+
+```bash
+# ① registry 能查到该版本
+npm view agent-foreman-mcp version --registry=https://registry.npmjs.org
+
+# ② 全新临时目录用 npx 拉起，做协议冒烟（应能看到 11 个工具）
+mkdir -p /tmp/npx-smoke && cd /tmp/npx-smoke
+npx -y agent-foreman-mcp
+
+# ③ tarball 可下载且指向正确
+npm view agent-foreman-mcp dist.tarball --registry=https://registry.npmjs.org
+```
+
+## 5. GitHub Release
+
+推送 `v<version>` tag 触发 `.github/workflows/release.yml`：
+
+1. 校验 tag / 输入版本与 `package.json` 一致；
+2. `npm pack` 并对产物做内容断言与干净消费者 stdio 检查；
+3. 要求该提交有成功 CI；
+4. 用 `scripts/release-body.mjs` 合成正文——**正文取自 `docs/release-v<version>.md` 与 `.en.md`，缺文档会直接失败**（避免产出只有 Full Changelog 的空壳）；
+5. 创建 Release 并附上 `agent-foreman-mcp-<version>.tgz`。
+
+> **首次发版（1.0.0）说明**：仓库此前无 tag，`git describe` 找不到上一版本，Full Changelog 会回退为 `commits/v1.0.0` 链接。这属预期行为，不是缺陷；从 v1.0.1 起恢复 `compare/v1.0.0...v1.0.1` 形式。
+
+## 6. 常见问题
 
 | 问题 | 处理 |
 |---|---|
-| `ENEEDAUTH` / `401` | token 未生效：检查 `npm whoami --registry=https://registry.npmjs.org` 返回你的用户名 |
-| 想用 npmmirror 加速但发布到 npmjs | 镜像只读，发布必须走 `--registry=https://registry.npmjs.org` |
-| 包名被占 | 换 `tianshu-dev-agents-mcp` 并同步改 package.json/README |
+| `ENEEDAUTH` / `401` | token 未生效：`npm whoami --registry=https://registry.npmjs.org` 应返回用户名 |
+| 想用镜像加速但发到 npmjs | 镜像只读；发布必须走 `--registry=https://registry.npmjs.org` |
+| `release.yml` 报缺发布说明 | 先写 `docs/release-v<version>.md` 与 `.en.md` 再推 tag |
+| `release.yml` 报「目标提交尚无成功 CI」 | 等该提交的 CI 跑绿，或先修 CI |
+| 包名被占 | 本包名已确认可用；若将来失效，需改名并同步 `package.json` / README / 文档 / CI |
 
----
+## 7. 不发布旧包
 
-## Gitee 发行版（镜像仓库需单独创建）
-
-GitHub Actions 的 `release.yml` 只作用于 GitHub；Gitee 作为镜像仓库**不会**自动生成发行版，
-历史上出现过「Gitee 只有 tag、没有发行版」的不一致。现由 `scripts/gitee-release.mjs` 幂等补齐。
-
-### 一次性配置（让 CI 自动建 Gitee 发行版）
-
-1. Gitee → 设置 → 私人令牌 → 生成新令牌，至少勾选 **projects** 权限，复制令牌。
-2. GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret：
-   名称 `GITEE_TOKEN`，值为上一步令牌。
-
-配置后，推 `v*` tag 时 `release.yml` 末尾会自动创建/更新对应 Gitee 发行版（正文取
-`docs/release-v<版本>.md`）。未配置 `GITEE_TOKEN` 时该步骤会**明确提示并跳过**，不会让工作流失败。
-
-### 手动补建某个版本
-
-```bash
-cd D:\Trae项目	ianshu-mcp
-GITEE_TOKEN=<你的私人令牌> node scripts/gitee-release.mjs 0.3.0
-# 正文默认取 docs/release-v0.3.0.md；也可显式指定：node scripts/gitee-release.mjs 0.3.0 docs/release-v0.3.0.md
-```
-
-脚本行为：已存在同 tag 发行版则**更新**正文，不存在则**创建**（`target_commitish` 默认 `master`，
-可用 `GITEE_BRANCH` 覆盖）。
-
-### 发布正文的构成
-
-GitHub 与 Gitee 的发行版正文均取 `docs/release-v<版本>.md`，并在末尾自动追加 `Full Changelog`
-比较链接。因此**发布前务必先写好该文档**，否则正文会退化为仅含 Full Changelog。
+历史上的 `tianshu-mcp` 是**另一个独立项目**。本仓库**不发布、不 deprecate、不触碰**它的 npm 包，其继续独立维护。本项目的发布只针对 `agent-foreman-mcp`。

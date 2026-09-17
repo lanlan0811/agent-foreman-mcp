@@ -8,8 +8,8 @@
 
 | 版本 | 支持 |
 |---|---|
-| 0.1.x（最新） | ✅ |
-| 更早版本 | ❌ |
+| 1.x（最新） | 支持 |
+| 更早版本 | 不支持 |
 
 ## 报告漏洞
 
@@ -17,12 +17,12 @@
 
 请使用 GitHub 的私密漏洞报告通道：
 
-1. 打开 <https://github.com/lanlan0811/tianshu-mcp/security/advisories/new>
+1. 打开 <https://github.com/lanlan0811/agent-foreman-mcp/security/advisories/new>
 2. 或在该仓库 **Security → Advisories → Report a vulnerability** 提交。
 
 报告请尽量包含：
 
-- 受影响版本（`npm view tianshu-mcp version` 或 `package.json`）；
+- 受影响版本（`npm view agent-foreman-mcp version` 或 `package.json`）；
 - 复现步骤（最小可复现配置/命令）；
 - 影响评估（能读什么、能写什么、是否需要本地访问）；
 - 若已知，给出缓解建议。
@@ -60,7 +60,7 @@
 - AI 内容校验的自备命令同样以 `shell:false` + 结构化 argv 执行，超时受 `visual.content.timeoutMs`
   约束并杀进程树；用户声明的环境变量使用 `{ 子进程变量名: 宿主环境变量名 }` 引用，缺失即整轮阻塞，
   MCP 自身不读取该变量的内容。
-- 任务产物（日志、报告、修复计划）只写入任务数据目录与项目内 `.tianshu-mcp/`。
+- 任务产物（日志、报告、修复计划）只写入任务数据目录与项目内 `.agent-foreman/`。
 
 ### 3. 进程与路径
 
@@ -80,7 +80,7 @@
 ### 5. 权限审批
 
 写/执行类工具（`run_task` / `cancel_task` / `rework_task` / `continue_task`）默认声明 `requireApproval`，
-由宿主（天枢）在 UI 侧把关；读/查询/验收类工具免审批。
+由宿主在 UI 侧把关；读/查询/验收类工具免审批。
 
 ### 6. ZCode GUI 边界
 

@@ -1,13 +1,13 @@
 # agent-profiles.md — Agent 适配与 Profiles 说明
 
-外部 AI-Agent 通过 **profile** 接入 tianshu-mcp：每个 agent 是一段声明式数据（可执行/参数模板/工作目录/env/超时/登录方式），**新增 agent 无需改代码**——在数据目录 `agent-profiles.json` 加一个 profile 即可（需要特殊输出解析的再补一个 adapter 子类）。
+外部 AI-Agent 通过 **profile** 接入 agent-foreman-mcp：每个 agent 是一段声明式数据（可执行/参数模板/工作目录/env/超时/登录方式），**新增 agent 无需改代码**——在数据目录 `agent-profiles.json` 加一个 profile 即可（需要特殊输出解析的再补一个 adapter 子类）。
 
 ## 存储位置
 
 | 级别 | 文件 | 说明 |
 |---|---|---|
 | 内置 | `src/agents/builtin.ts` | 代码内置默认 profiles（codex/zcode/traework）；随版本更新 |
-| 用户级 | `~/.tianshu-mcp/agent-profiles.json`（`TIANSHU_MCP_HOME` 可覆盖） | 整键覆盖内置同名 profile |
+| 用户级 | `~/.agent-foreman/agent-profiles.json`（`AGENT_FOREMAN_HOME` 可覆盖） | 整键覆盖内置同名 profile |
 
 合并规则：先内置，再用户级覆盖（同 `id` 用户级胜出）。
 
@@ -87,7 +87,7 @@ TraeWork 存活检测相关字段：`stableRounds` 仅确认 DOM 已稳定；随
 ### Codex 桌面端（GUI 驱动，2026-09-11 Windows 真机已验证）
 
 ```jsonc
-// ~/.tianshu-mcp/agent-profiles.json （Windows 示例）
+// ~/.agent-foreman/agent-profiles.json （Windows 示例）
 {
   "profiles": {
     "codex": {
@@ -112,12 +112,12 @@ TraeWork 存活检测相关字段：`stableRounds` 仅确认 DOM 已稳定；随
       },
       "gui": {
         "activation": "msix-com",
-        "userDataDir": "{LOCALAPPDATA}/tianshu-mcp/codex-gui/profile",
+        "userDataDir": "{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile",
         "appxPackageName": "OpenAI.Codex",
         "cdpPort": 9333,
         "cdpPortAuto": true,
         "permissionMode": "完全访问",
-        "fixPlanDir": ".zcode/plans",
+        "fixPlanDir": ".agent-foreman/plans",
         "defaultAutoFixRounds": 5,
         "launchTimeoutMs": 60000,
         "pollIntervalMs": 3000,
@@ -152,7 +152,7 @@ TraeWork 存活检测相关字段：`stableRounds` 仅确认 DOM 已稳定；随
 }
 ```
 
-> 历史实测见 [m2-smoke-record.md](m2-smoke-record.md)；`<hash>` 目录随 Codex 更新，用 `executableDiscovery` 自动取最新。该路径已不作为内置默认。
+> `<hash>` 目录随 Codex 更新，用 `executableDiscovery` 自动取最新。该路径已不作为内置默认。
 
 ## 状态与轮询语义
 

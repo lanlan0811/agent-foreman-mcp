@@ -1,11 +1,11 @@
-# `.tianshu-mcp/acceptance.json` Specification
+# `.agent-foreman/acceptance.json` Specification
 
-Place this file at `<project>/.tianshu-mcp/acceptance.json` to define project-level acceptance checks. tianshu-mcp reads it for auto-verify (run_task) and manual `verify_task` on that project.
+Place this file at `<project>/.agent-foreman/acceptance.json` to define project-level acceptance checks. agent-foreman-mcp reads it for auto-verify (run_task) and manual `verify_task` on that project.
 
 ## Configuration precedence (high → low)
 
 1. `extraChecks` passed to `verify_task` — **appended** after the base set (`checksMode:"replace"` swaps them in instead)
-2. Project-level `<project>/.tianshu-mcp/acceptance.json`
+2. Project-level `<project>/.agent-foreman/acceptance.json`
 3. Server data-dir `projects.json[pathHash].verify` (admin-curated)
 4. Default set (derived from the project's detected tech stack, see below)
 
@@ -95,5 +95,5 @@ boundary, and the egress statement are in the "AI content validation" section of
 
 ## FAQ
 
-- **verify can't find node/npx** — tianshu-mcp subprocesses inherit PATH with the system node dir prefixed. Check your PATH if it still fails.
+- **verify can't find node/npx** — agent-foreman-mcp subprocesses inherit PATH with the system node dir prefixed. Check your PATH if it still fails.
 - **Temporary extra verification** — `verify_task(taskId, extraChecks=[{name:"x", cmd:["…"]}])` without editing files.

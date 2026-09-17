@@ -1,6 +1,6 @@
 # 贡献指南（CONTRIBUTING）
 
-感谢你有兴趣为 `tianshu-mcp` 做贡献。本文说明开发环境、工程规范与提交流程。
+感谢你有兴趣为 `agent-foreman-mcp` 做贡献。本文说明开发环境、工程规范与提交流程。
 
 英文版：[CONTRIBUTING.en.md](CONTRIBUTING.en.md)
 
@@ -18,8 +18,8 @@
 ## 2. 本地开发
 
 ```bash
-git clone https://github.com/lanlan0811/tianshu-mcp.git
-cd tianshu-mcp
+git clone https://github.com/lanlan0811/agent-foreman-mcp.git
+cd agent-foreman-mcp
 npm ci                # 按 lockfile 安装
 npm run build         # sync-version + tsc → dist/
 npm test              # vitest（单元 + 集成 + 协议）
@@ -101,16 +101,15 @@ src/
 
 ## 6. 提交与分支规范
 
-- **只在 `master` 分支提交**，不创建其他分支。
+- **只在 `main` 分支提交**，不创建其他分支。
 - **提交信息用中文**，建议 `类型: 摘要` 形式，类型可选：`feat` / `fix` / `docs` / `chore` / `test` / `refactor`。
 - **一个功能一次提交**，提交前确保门禁全绿。
-- 推送目标：`github`（主仓库）与 `gitee`（镜像仓库）双推。
+- 推送目标：`origin`（GitHub 主仓库）。本项目无镜像仓库。
 
 ```bash
 git add .
 git commit -m "feat: 新增 xxx"
-git push github master
-git push gitee master
+git push origin main
 ```
 
 ## 7. 版本与发布
@@ -118,8 +117,8 @@ git push gitee master
 - 版本号遵循语义化版本；发版时：
   1. 修改 `package.json` 的 `version`；
   2. `npm run build` 同步 `src/version.generated.ts`；
-  3. 提交并推送两个仓库；
-  4. 打 tag（如 `v0.1.5`）并推送到两个仓库 → 触发 `Release` workflow 校验
+  3. 提交并推送仓库；
+  4. 打 tag（如 `v1.0.0`）并推送 → 触发 `Release` workflow 校验
      `tag == package.json == tarball` 并创建 GitHub Release（draft，需人工发布）；
   5. `npm publish --registry=https://registry.npmjs.org --access public`。
 - 变更需同步登记到 [CHANGELOG.md](CHANGELOG.md)（英文版同步更新 `CHANGELOG.en.md`）。

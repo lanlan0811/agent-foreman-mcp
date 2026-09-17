@@ -1,6 +1,6 @@
 # TraeWork GUI Driver via CDP
 
-This document explains how `tianshu-mcp` drives TraeWork (TRAE SOLO CN) over the Chrome DevTools
+This document explains how `agent-foreman-mcp` drives TraeWork (TRAE SOLO CN) over the Chrome DevTools
 Protocol (CDP) to close the loop: **dispatch → wait for completion → verify → rework on failure → re-verify**.
 Chinese version: [traework-cdp.md](traework-cdp.md).
 
@@ -32,7 +32,7 @@ from the DOM. This matches the mechanism already proven by the `oh-dsh-trae-api`
   ```
 - No extra dependencies: the CDP client uses only Node built-ins (`http` + global `WebSocket`, Node ≥ 20)
 
-> `tianshu-mcp` **prefers to reuse** an already-running instance with a debug port; it only launches a
+> `agent-foreman-mcp` **prefers to reuse** an already-running instance with a debug port; it only launches a
 > new instance when none is available. It **never terminates an instance the user started** (see §6).
 
 ---
@@ -40,7 +40,7 @@ from the DOM. This matches the mechanism already proven by the `oh-dsh-trae-api`
 ## 3. Quick start
 
 ```jsonc
-// Call via MCP (Tianshu or any MCP client)
+// Call via MCP (any MCP host)
 run_task({
   "projectPath": "D:\\TraeProjects\\my-app",   // absolute path
   "agentId": "traework",
@@ -97,7 +97,7 @@ node scripts/probe-traework.mjs send "task"        # end-to-end send and fetch r
 ## 4. Configuration (`traework` section of `agent-profiles.json`)
 
 Built-in defaults live in `src/agents/builtin.ts`; the user data directory
-`~/.tianshu-mcp/agent-profiles.json` can override any key.
+`~/.agent-foreman/agent-profiles.json` can override any key.
 
 ```jsonc
 {
@@ -283,31 +283,3 @@ src/agents/traework/
 
 ---
 
-## 10. Verification record (2026-09-08)
-
-| Item | Result |
-|---|---|
-| CDP connection | ✅ `--remote-debugging-port=9222` connected; page target is `solo-lite.html` |
-| Selector hits | ✅ chat input / new task / task list / mode / model dropdown / project button / dropdown rows / footer all hit |
-| Project binding | ✅ When not in the dropdown, the native dialog registered `D:\Trae项目\ts-e2e-smoke` (`state.vscdb` entries 18→19) |
-| Model switch | ✅ Switched to `GLM-5.3` with strict verification |
-| **End-to-end** | ✅ `run_task(agentId=traework, model=GLM-5.3, autoVerify=true)` drove TraeWork to create `result.txt`; auto-verification passed (`succeeded`, changedFiles `result.txt`) |
-| Unit/integration | ✅ 153/153 passed (81 new, including the rework loop and race regression) |
-| lint / typecheck / build | ✅ all clean |
-| **CI (GitHub Actions)** | ✅ **7/7 green** — ubuntu/macos/windows × Node 20/22 + npm tarball check (run 34222781967, commit `e8c59cc`) |
-
-### 10.1 Two pre-existing defects fixed during implementation
-
-1. **Rework feedback race (pre-existing; intermittent under load, hit on CI Windows/Node 22)**
-   - Symptom: after `rework_task(feedback)`, the rework round received no feedback and stayed `failed`.
-   - Root cause: the terminal snapshot is written first, so the caller can immediately set
-     `reworkFeedback`; the *previous* run's post-processing then did `delete meta.reworkFeedback`,
-     erasing the freshly written feedback.
-   - Fix: consume and clear the feedback atomically when `startTask` begins; no longer delete in post-processing.
-   - Regression: `test/integration/rework-feedback-race.test.ts` (three consecutive failure→immediate-rework rounds).
-2. **`projectBasename` cross-platform (failed on Linux/macOS CI)**
-   - Symptom: on Linux/macOS, `path.basename("D:\\a\\b")` returns the whole string (POSIX does not treat `\` as a separator).
-   - Fix: split explicitly on both `\` and `/`.
-
-> Real-machine tests require a running TraeWork and are **not part of CI** (see the test layering in
-> `docs/acceptance-config.md`).

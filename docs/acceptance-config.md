@@ -1,11 +1,11 @@
-# .tianshu-mcp/acceptance.json 规范
+# .agent-foreman/acceptance.json 规范
 
-项目级验收配置：把该文件放在项目根目录的 `.tianshu-mcp/acceptance.json`，tianshu-mcp 对该项目做验收（run_task 自动验收 / verify_task）时优先读取它。
+项目级验收配置：把该文件放在项目根目录的 `.agent-foreman/acceptance.json`，agent-foreman-mcp 对该项目做验收（run_task 自动验收 / verify_task）时优先读取它。
 
 ## 配置优先级（高 → 低）
 
 1. `verify_task` 调用时的 `extraChecks`（**追加**到基础集之后；`checksMode:"replace"` 才替换）
-2. 项目内 `<project>/.tianshu-mcp/acceptance.json`
+2. 项目内 `<project>/.agent-foreman/acceptance.json`
 3. server 数据目录 `projects.json[pathHash].verify`（管理员补录）
 4. 默认集（按项目技术栈自动推导，见下）
 
@@ -39,7 +39,7 @@
 - 每条命令在**项目根目录**、以结构化 argv 执行（`shell:false`，不拼接 shell 字符串），stdout/stderr 写入该轮 `verify-N.log`，报告附输出尾部。
 - **有界并行**：命令检查按 `verifyConcurrency` 并行执行（worker 池，上限 4）。报告中各 check 的展示顺序恒为声明顺序（与完成顺序无关）；并行时每条 check 先写独立临时日志，全部结束后按声明顺序拼成同一份 `verify-N.log`（文件名与格式和串行完全一致）。`verifyConcurrency:1` 退化为逐条串行。任一 check 原有 `timeoutMs`/取消语义不变。
 
-### ⚠ 并行的脚本干扰
+### 并行的脚本干扰
 
 `verifyConcurrency` 默认 2（**默认值由串行变为 2**）。并行执行的 checks 共享同一个项目工作区，以下形态的脚本互相干扰时可能产生误失败或误通过，**建议显式设 `"verifyConcurrency": 1`**（或拆轮验收）：
 
@@ -111,6 +111,6 @@
 
 ## 常见问题
 
-- **验收命令找不到 node/npx**：tianshu-mcp 子进程会显式继承并前置 PATH（含系统 node 目录与天枢自带 node 目录）。若仍异常，检查你的 PATH。
+- **验收命令找不到 node/npx**：agent-foreman-mcp 子进程会显式继承并前置 PATH（含系统 node 目录与宿主自带 node 目录）。若仍异常，检查你的 PATH。
 - **想临时加验**：`verify_task(taskId, extraChecks=[{name:"x", cmd:["…"]}])`，不改文件。
 - **不想让某脚本缺席导致一堆 skip**：接受即可，skip 不算失败，报告会标注缺失原因。

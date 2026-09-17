@@ -9,9 +9,9 @@ Visual acceptance extends `run_task`, `verify_task`, `get_task_report`, `query_t
 Existing features retain Node.js >=20; visual execution requires >=20.3. Browser and image dependencies load on demand. Neither npm installation nor MCP startup downloads a browser.
 
 ```sh
-tianshu-mcp visual browser install
-tianshu-mcp visual doctor /path/to/project
-tianshu-mcp visual init /path/to/project
+agent-foreman-mcp visual browser install
+agent-foreman-mcp visual doctor /path/to/project
+agent-foreman-mcp visual init /path/to/project
 ```
 
 Pinned dependencies: puppeteer-core 24.43.1, @puppeteer/browsers 2.13.2, sharp 0.34.5, pixelmatch 7.2.0. The installer reads Puppeteer's browser revision mapping. Browsers live under the MCP data directory's `browsers` folder. Restore missing optional image dependencies with `npm install --include=optional`; their absence does not prevent existing MCP features from starting.
@@ -20,7 +20,7 @@ Minimum browser launch and screenshot verified locally on Windows 10 Pro 10.0.19
 
 ## Configuration
 
-Edit `.tianshu-mcp/acceptance.json`. `init` merges a disabled template, preserves existing configuration, and refuses to overwrite an existing visual section. Absent files retain default command inference; invalid/unreadable configuration blocks acceptance. Omitted `checks` still infer commands; explicitly empty `checks: []` disable configured commands. `extraChecks` and `checksMode=replace` never disable visual gates. `requireChanges` defaults to true; artifact-only checks may explicitly set false.
+Edit `.agent-foreman/acceptance.json`. `init` merges a disabled template, preserves existing configuration, and refuses to overwrite an existing visual section. Absent files retain default command inference; invalid/unreadable configuration blocks acceptance. Omitted `checks` still infer commands; explicitly empty `checks: []` disable configured commands. `extraChecks` and `checksMode=replace` never disable visual gates. `requireChanges` defaults to true; artifact-only checks may explicitly set false.
 
 ```json
 {
@@ -83,8 +83,8 @@ Preparation request JSON:
 Optional `imports: [{caseId,viewportId,file}]` imports project-local PNG/JPEG/WebP references. Candidates stay in MCP storage and return candidateId, digest, and preview. Inspect previews before explicitly approving:
 
 ```sh
-tianshu-mcp visual baseline prepare prepare-request.json
-tianshu-mcp visual baseline approve approve-request.json
+agent-foreman-mcp visual baseline prepare prepare-request.json
+agent-foreman-mcp visual baseline approve approve-request.json
 ```
 
 Approval JSON: `{candidateId,expectedDigest,approvalNote,taskId?}`. An optional taskId must reference a needs_attention task in the same project. Changed digests, baselines, rules, or project identity reject adoption. Git-ignored targets are rejected without forced staging or ignore edits. MCP `prepare_visual_baseline`/`approve_visual_baseline` use the same request structures. Both have side effects and require actual host authorization controls. Automatic repair must never approve baselines.
@@ -92,8 +92,8 @@ Approval JSON: `{candidateId,expectedDigest,approvalNote,taskId?}`. An optional 
 Rules and baseline digests are frozen before agent execution and checked around verification. Rule changes require a separate review:
 
 ```sh
-tianshu-mcp visual rules review TASK_ID
-tianshu-mcp visual rules approve TASK_ID REVIEW_ID DIGEST "Explicit user approval note"
+agent-foreman-mcp visual rules review TASK_ID
+agent-foreman-mcp visual rules approve TASK_ID REVIEW_ID DIGEST "Explicit user approval note"
 ```
 
 Baseline/environment blockers enter needs_attention with a pending verification marker. After resolution, rework_task verifies first: pass ends the task, continued blocking waits, and only real defects trigger agent repair.
@@ -101,7 +101,7 @@ Baseline/environment blockers enter needs_attention with a pending verification 
 ## AI content validation (optional, off by default)
 
 Validates whether the **content** of an image or page screenshot matches an expectation you declare explicitly
-(e.g. "the logo contains a blue gear and the white text TIANSHU", "a username field, a password field and a
+(e.g. "the logo contains a blue gear and the white text AGENT_FOREMAN", "a username field, a password field and a
 login button exist"). It runs in parallel with the pixel/spec checks and lands in the unified report as an
 independent result item with `kind:"content"`.
 
@@ -128,7 +128,7 @@ client. Judgement is fully delegated to a local command you supply, which uses i
       "cache": true
     },
     "contents": [
-      { "id": "logo-elements", "files": ["assets/logo.png"], "expect": "the logo contains a blue gear and the white text TIANSHU" }
+      { "id": "logo-elements", "files": ["assets/logo.png"], "expect": "the logo contains a blue gear and the white text AGENT_FOREMAN" }
     ],
     "pages": [
       { "id": "home", "source": { "type": "static", "root": "dist" }, "route": "/" },
@@ -188,7 +188,7 @@ client. Judgement is fully delegated to a local command you supply, which uses i
 - **Any command-level failure (non-zero exit, timeout, invalid output) makes the item `blocked`** rather than folding infrastructure trouble into "uncertain".
 - The cache key is an input hash covering the image digest, expectation, command string, the **command's absolute path and binary digest** (so upgrading your CLI invalidates old verdicts), argument template, cwd, resolved-environment digest (no plaintext), `allowRemote`, `samples`, and `minConfidence`. When the command's identity cannot be computed reliably, **nothing is cached**. Only completed judgements are cached — `blocked` never is — and the cache stores the expectation digest rather than its text.
 - Cache location: `<taskDir>/visual-content-cache/`. A hit skips the command and marks the result `cached: true`.
-- Escape hatches: `content.cache: false` disables caching; `tianshu-mcp visual content cache clear <taskId>` clears it.
+- Escape hatches: `content.cache: false` disables caching; `agent-foreman-mcp visual content cache clear <taskId>` clears it.
 
 ### Reason codes
 
@@ -226,7 +226,7 @@ Whether images leave the machine **depends on the behaviour of your command**; t
 ### Testing your command
 
 ```sh
-tianshu-mcp visual content probe /path/to/project [ruleId]
+agent-foreman-mcp visual content probe /path/to/project [ruleId]
 ```
 
 Runs a real judgement for the declared rules but **writes no evidence and no cache**, printing the raw votes and the command-resolution result so you can confirm the command works and the judgement is stable. `visual doctor` additionally reports each effective command's resolution result and its `allowRemote` declaration.
@@ -236,8 +236,8 @@ Runs a real judgement for the declared rules but **writes no evidence and no cac
 Artifacts live at `<home>/tasks/<taskId>/visual/<reportRound>`. Automatic/manual verification allocate exclusive report rounds and preserve history. Markdown/JSON expose an independent visual section. Offline HTML supports status filters, side-by-side images, opacity overlays, metrics, and region coordinates without CDNs.
 
 ```sh
-tianshu-mcp visual artifacts clean TASK_ID
-tianshu-mcp visual artifacts clean TASK_ID --apply
+agent-foreman-mcp visual artifacts clean TASK_ID
+agent-foreman-mcp visual artifacts clean TASK_ID --apply
 ```
 
 Default behavior previews only. Applying deletes that task's visual directory, retains reports and cleanup markers, and never deletes official baselines. Budget exhaustion blocks instead of removing historical evidence. CLI dispatch occurs before MCP stdio connection.
