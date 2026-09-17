@@ -12,10 +12,10 @@ Security vulnerabilities: do NOT report here; follow SECURITY.md.
 
 ## 环境 / Environment
 
-- `tianshu-mcp` 版本 / version：
+- `agent-foreman-mcp` 版本 / version：
 - Node 版本 / Node version：
 - 操作系统 / OS：
-- 宿主 / Host（天枢版本，如相关 / Tianshu version if relevant）：
+- 宿主 / Host（如 Claude Desktop / Cursor / ZCode / Cline / Windsurf / Host, e.g. Claude Desktop / Cursor / ZCode / Cline / Windsurf）：
 - 目标 agent / Target agent（`codex` / `traework` / 其他）：
 
 ## 复现步骤 / Steps to reproduce

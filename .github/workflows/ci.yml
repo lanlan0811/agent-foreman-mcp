@@ -17,8 +17,8 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-15-intel, macos-15]
         node: [20, 22, 24]
     env:
-      TIANSHU_VISUAL_BROWSER_TEST: "1"
-      TIANSHU_VISUAL_EVIDENCE: .tmp-check/visual-evidence
+      AGENT_FOREMAN_VISUAL_BROWSER_TEST: "1"
+      AGENT_FOREMAN_VISUAL_EVIDENCE: .tmp-check/visual-evidence
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,28 +38,28 @@ jobs:
         env:
           BROWSER_PATH: ${{ steps.browser.outputs.executable }}
         run: |
-          sudo tee /etc/apparmor.d/tianshu-visual-chrome >/dev/null <<EOF
+          sudo tee /etc/apparmor.d/agent-foreman-visual-chrome >/dev/null <<EOF
           abi <abi/4.0>,
           include <tunables/global>
-          profile tianshu-visual-chrome "$BROWSER_PATH" flags=(unconfined) {
+          profile agent-foreman-visual-chrome "$BROWSER_PATH" flags=(unconfined) {
             userns,
           }
           EOF
-          sudo apparmor_parser -r /etc/apparmor.d/tianshu-visual-chrome
+          sudo apparmor_parser -r /etc/apparmor.d/agent-foreman-visual-chrome
       - name: Real browser and image acceptance
         run: npx vitest run visual --maxWorkers=1
       - name: Production tarball visual acceptance and offline report
         shell: bash
         env:
-          TIANSHU_VISUAL_REPORT_EVIDENCE: .tmp-check/visual-evidence/report.png
+          AGENT_FOREMAN_VISUAL_REPORT_EVIDENCE: .tmp-check/visual-evidence/report.png
         run: |
           PACKAGE_DIR="$RUNNER_TEMP/visual-package"
           CONSUMER="$RUNNER_TEMP/visual-consumer"
           mkdir -p "$PACKAGE_DIR" "$CONSUMER"
           npm pack --pack-destination "$PACKAGE_DIR"
           VERSION=$(node -p "require('./package.json').version")
-          npm install --prefix "$CONSUMER" --omit=dev --no-audit --no-fund "$PACKAGE_DIR/tianshu-mcp-$VERSION.tgz"
-          node scripts/check-visual-consumer.mjs --package-dir "$CONSUMER/node_modules/tianshu-mcp"
+          npm install --prefix "$CONSUMER" --omit=dev --no-audit --no-fund "$PACKAGE_DIR/agent-foreman-mcp-$VERSION.tgz"
+          node scripts/check-visual-consumer.mjs --package-dir "$CONSUMER/node_modules/agent-foreman-mcp"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -153,7 +153,7 @@ jobs:
           LIST="$RUNNER_TEMP/pkg/listing.txt"
           tar -tzf "$TGZ" > "$LIST"
           MISSING=0
-          for f in package/dist/index.js package/skills/tianshu-mcp/SKILL.md \
+          for f in package/dist/index.js package/skills/agent-foreman-mcp/SKILL.md \
                    package/dist/agents/zcode/adapter.js package/dist/agents/zcode/run.js \
                    package/scripts/probe-zcode.mjs package/README.md package/README.en.md package/LICENSE; do
             if ! grep -qF "$f" "$LIST"; then echo "$f missing"; MISSING=1; fi
@@ -168,11 +168,11 @@ jobs:
           CONSUMER="$RUNNER_TEMP/consumer"
           rm -rf "$CONSUMER"; mkdir -p "$CONSUMER"
           (cd "$CONSUMER" && npm init -y >/dev/null && npm install --no-audit --no-fund "$TGZ")
-          BIN="$CONSUMER/node_modules/tianshu-mcp/dist/index.js"
+          BIN="$CONSUMER/node_modules/agent-foreman-mcp/dist/index.js"
           test -f "$BIN" || { echo "installed bin missing: $BIN"; exit 1; }
           # 安装包内无 src/，脚本自动回退读 dist/mcp/tools.js 抽取工具集合
           node scripts/check-stdio.mjs \
             --entry "$BIN" \
-            --repo "$CONSUMER/node_modules/tianshu-mcp" \
+            --repo "$CONSUMER/node_modules/agent-foreman-mcp" \
             --expect-version "$(node -p "require('./package.json').version")" \
             --fixtures "$GITHUB_WORKSPACE/test/stub-agent"

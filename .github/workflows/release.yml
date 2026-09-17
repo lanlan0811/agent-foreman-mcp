@@ -73,7 +73,7 @@ jobs:
           rm -f ./*.tgz
           npm pack --pack-destination "$RUNNER_TEMP"
           # 只捕获本次生成、与解析版本一致的那个 tarball
-          TGZ="$RUNNER_TEMP/tianshu-mcp-${{ steps.version.outputs.version }}.tgz"
+          TGZ="$RUNNER_TEMP/agent-foreman-mcp-${{ steps.version.outputs.version }}.tgz"
           test -f "$TGZ" || { echo "expected tarball $TGZ not found"; ls "$RUNNER_TEMP"/*.tgz; exit 1; }
           tar -tzf "$TGZ" > "$RUNNER_TEMP/package-list.txt"
           for REQUIRED in package/dist/agents/zcode/adapter.js package/dist/agents/zcode/run.js package/scripts/probe-zcode.mjs; do
@@ -88,11 +88,11 @@ jobs:
           CONSUMER="$RUNNER_TEMP/consumer"
           rm -rf "$CONSUMER"; mkdir -p "$CONSUMER"
           (cd "$CONSUMER" && npm init -y >/dev/null && npm install --no-audit --no-fund "${{ steps.pack.outputs.tarball }}")
-          BIN="$CONSUMER/node_modules/tianshu-mcp/dist/index.js"
+          BIN="$CONSUMER/node_modules/agent-foreman-mcp/dist/index.js"
           test -f "$BIN" || { echo "installed bin missing: $BIN"; exit 1; }
           node scripts/check-stdio.mjs \
             --entry "$BIN" \
-            --repo "$CONSUMER/node_modules/tianshu-mcp" \
+            --repo "$CONSUMER/node_modules/agent-foreman-mcp" \
             --expect-version "${{ steps.version.outputs.version }}" \
             --fixtures "$GITHUB_WORKSPACE/test/stub-agent"
 
@@ -118,34 +118,17 @@ jobs:
           PREV=$(git describe --tags --abbrev=0 "v${VER}^" 2>/dev/null | sed 's/^v//' || echo "")
           BODY="$RUNNER_TEMP/release-body.md"
           node scripts/release-body.mjs \
-            "$VER" github "${{ github.repository }}" tianshu-mcp "${{ steps.ci.outputs.id }}" "$PREV" > "$BODY"
+            "$VER" "${{ github.repository }}" agent-foreman-mcp "${{ steps.ci.outputs.id }}" "$PREV" > "$BODY"
           echo "path=$BODY" >> "$GITHUB_OUTPUT"
-
-      - name: Require mirror release credentials
-        env:
-          GITEE_ACCESS_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: test -n "$GITEE_ACCESS_TOKEN" || { echo "GITEE_TOKEN is required for a complete dual-repository release"; exit 1; }
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: tianshu-mcp v${{ steps.version.outputs.version }}
+          name: agent-foreman-mcp v${{ steps.version.outputs.version }}
           draft: false
           # 用上面合成的正文，不再依赖自动生成的空壳 notes
           body_path: ${{ steps.body.outputs.path }}
           generate_release_notes: false
           files: |
             ${{ steps.pack.outputs.tarball }}
-
-      # Gitee 是镜像仓库，其发行版不在 GitHub Actions 默认范围内：用 Gitee OpenAPI 幂等补齐，
-      # 避免出现「只有 tag、没有发行版」的不一致。
-      # 需要在仓库 Secrets 配置 GITEE_TOKEN（Gitee → 设置 → 私人令牌，勾选 projects 权限）；
-      # 正式发行缺少凭据时阻塞，不能跳过镜像后宣称发行成功。
-      - name: Create/Update Gitee release (mirror, needs GITEE_TOKEN secret)
-        shell: bash
-        env:
-          GITEE_ACCESS_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: |
-          PREV=$(git describe --tags --abbrev=0 "v${{ steps.version.outputs.version }}^" 2>/dev/null | sed 's/^v//' || echo "")
-          node scripts/gitee-release.mjs "${{ steps.version.outputs.version }}" "$PREV"
