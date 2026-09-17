@@ -1,7 +1,7 @@
 {
   "name": "agent-foreman-mcp",
-  "version": "0.5.4",
-  "description": "面向任意 MCP 宿主的通用 AI-Agent 编排 MCP server —— 驱动 Codex CLI、TraeWork GUI 与 ZCode GUI 完成项目开发、验收、失败返修与再验收闭环。",
+  "version": "1.0.0",
+  "description": "面向任意 MCP 宿主的通用 AI-Agent 编排 MCP server —— 驱动 Codex 桌面端、TraeWork GUI 与 ZCode GUI 完成项目开发、验收、失败返修与再验收闭环。",
   "type": "module",
   "license": "Apache-2.0",
   "repository": {
