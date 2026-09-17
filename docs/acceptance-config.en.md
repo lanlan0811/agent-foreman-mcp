@@ -31,7 +31,7 @@ Place this file at `<project>/.agent-foreman/acceptance.json` to define project-
 }
 ```
 
-## Semantics (as of R4 remediation)
+## Semantics
 
 - **optional:true** — a failing optional check is recorded as a warning ("optional 检查未通过") and does **not** affect the round verdict. Mandatory (default) failures make the round fail.
 - **extraChecks append** — by default (`checksMode:"append"`) the project/default checks run first, then `extraChecks` are **appended**; base gates are never weakened. `checksMode:"replace"` runs only `extraChecks`.
@@ -48,7 +48,7 @@ Each check runs in the project root as structured argv (`shell:false`), stdout/s
 
 Built-in extra check (not configurable off): `git-diff-check` = `git diff --check` relative to the pre-work baseline; auto-skipped for non-git projects.
 
-## Default set (when no config exists)
+## Default set (derived automatically when no config exists)
 
 | Detected | Check | When absent |
 |---|---|---|
@@ -59,9 +59,28 @@ Built-in extra check (not configurable off): `git-diff-check` = `git diff --chec
 | `go.mod` | `go test ./...` | — |
 | `Cargo.toml` | `cargo test` | — |
 
-## Reports
+## Check semantics
 
-Each round writes `report-N.md` + `report-N.json` under the task dir `tasks/<taskId>/`. `report.json.checks[]` carries `{name, cmd, passed, durationMs, exitCode, outputTail, timeout, skipped, reason, optional}`. Changes/diffstat/suspicious signals live in `report.json.analysis`, all computed against the pre-work git baseline captured by run_task/rework_task.
+- **optional:true**: a failure on that check is recorded as a warning only (`report.message` notes "optional check
+  did not pass") and **does not affect the round's verdict**; only a required (default) failure makes the verdict
+  `failed`.
+- **extraChecks are appended**: the default is `checksMode:"append"` — project/default checks are resolved first and
+  extraChecks are **appended** (the base gate is never weakened). Only `checksMode:"replace"` substitutes the whole
+  base set with extraChecks alone.
+- **Report rounds are 0-based**: `report-N.*` starts at 0, so `get_task_report(round=0)` is legal and omitting
+  `round` returns the latest.
+- **Manual `verify_task(taskId)`**: allocates the next free round inside the task directory and never overwrites an
+  existing `report-0.*`.
+- **baselineRef**: `verify_task` accepts a git ref or a task ID (for a task ID it defaults to that task's pre-work
+  baseline); an invalid ref returns a structured error rather than silently falling back to HEAD.
+
+## Combined with the task store
+
+- Every acceptance round produces `report-N.md` and `report-N.json` in `tasks/<taskId>/`.
+- Each entry in `report.json.checks[]` carries
+  `{name, cmd, passed, durationMs, exitCode, outputTail, timeout, skipped, reason}`.
+- Changes, diffstat and suspicious markers live in the `report.json.analysis` section, all computed against the
+  **pre-work git baseline** captured by `run_task` / `rework_task`.
 
 ## visual section: AI content validation fields
 

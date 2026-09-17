@@ -1,25 +1,135 @@
-# Agent Capability Matrix (English summary)
+# Agent Capability Matrix (adapter-matrix.en.md)
 
-Full Chinese: [adapter-matrix.md](adapter-matrix.md). We only integrate agents with an official
-headless CLI/API **or a verified programmatic GUI driver**; agents without either are marked
-`unsupported` (no pty hacks). Electron GUI automation is allowed only through a product/process-verified local CDP adapter; private internal protocols remain out of scope.
+[中文](adapter-matrix.md)
 
-## Matrix (as of 2026-09-11)
+This document records **the research conclusions and current state of external AI-agent integration routes**.
+It pairs with [agent-profiles.en.md](agent-profiles.en.md): this file answers "why is this agent integrated this
+way", while that one answers "how do I write the profile fields".
 
-| Agent | Interface | Status | Login | Notes |
-|---|---|---|---|---|
-| **TraeWork / TRAE SOLO CN** | desktop IDE + **CDP GUI driver** | **integrated & machine-verified** (see [traework-cdp.en.md](traework-cdp.en.md)) | reuses TraeWork desktop login (this MCP reads no credentials) | no headless CLI; drives the chat UI via `--remote-debugging-port`; replies extracted from the DOM |
+## Integration principles
 
-## Extending
+1. **Official interfaces first**: when an official headless CLI/API exists, use `driver: "spawn"`.
+2. **A GUI route must be strictly verifiable**: an Electron desktop product is driven through an isolated GUI adapter
+   (CDP) only when **product, process, project and session** are all verifiable.
+3. **No undocumented internal protocols**, no pty hacks, no unverified generic GUI automation.
+4. **Login state never lands in this server**: each agent uses its own login state; this MCP never reads, stores or
+   forwards credentials.
 
-1. Add a profile in `agent-profiles.json` (usually zero code).
-2. If custom output parsing is needed, implement `AgentAdapter` and `registry.register(id, adapter)`.
-3. `get_profiles` self-checks discovery; run one stub/codex smoke.
+## Summary matrix
 
-## Research conclusions
+| Agent | Interface | driver / adapter | status | Executable discovery | Login | Task/file read-back |
+|---|---|---|---|---|---|---|
+| **Codex desktop** | MSIX store package + **CDP GUI driver** | `gui` / `codex-gui` | **ready** (`research` on darwin) | Appx query first, disk scan as fallback | Reuses the `~/.codex` login (managed instances get a dedicated profile) | Replies extracted from the DOM; project files written by Codex itself |
+| **ZCode desktop** | Electron + **CDP GUI driver** | `gui` / `zcode-gui` | **research** | Desktop-app path probing; runtime data is never treated as an entry point | Reuses the ZCode desktop login | Extracted from the DOM; supports project-less dispatch |
+| **TraeWork / TRAE SOLO CN** | Desktop IDE + **CDP GUI driver** | `gui` / `traework-gui` | **ready** | No headless CLI; drives the chat UI via `--remote-debugging-port` | Reuses the TraeWork desktop login | Replies extracted from the DOM; project files written by TraeWork itself |
+| **codex-cli** (user-defined) | Official CLI | `spawn` | user-defined | `PATH` / `executableDiscovery` | Reuses `~/.codex` | Judged by exit code |
+| **stub** (tests) | Local script | `spawn` | tests only | Test-injected profile | None | Fixed plays |
 
-- **Z1 (ZCode headless)**: install at `D:\Z-Code\ZCode` is a standard Electron app; no `cli.js`/headless launcher/`cli.exe`; `resources/tools/` = cua-helper, ripgrep, ugrep only; `~/.zcode/cli` is runtime session data. The headless route remains unsupported. A separate CDP GUI route is now implemented and stays `research` until Windows and macOS hardware loops pass; see [zcode-cdp.en.md](zcode-cdp.en.md).
-- **T1 (TraeWork)**: `D:\TRAE Work CN` = TRAE SOLO CN v1.107.1. There is **no headless agent CLI** (only VS Code-family commands: `open`/`serve-web`/extension mgmt) — that part of the original conclusion stands. **Correction (2026-09-08)**: TraeWork supports `--remote-debugging-port`, so the GUI route is viable; a CDP driver is implemented and machine-verified (`run_task(agentId="traework")` created a file and auto-verification passed). Status is now **`ready` with `driver: "gui"`**. Details: [traework-cdp.en.md](traework-cdp.en.md).
-- **C2 (Codex desktop GUI, 2026-09-11)**: the desktop app is an MSIX package; `C:\Program Files\WindowsApps\...\app\ChatGPT.exe` cannot be started directly (`Access is denied`, Win32 `0x80070005`) because of the AppX execution tag, **but** `IApplicationActivationManager::ActivateApplication(AUMID, args, 0)` succeeds and forwards `args` verbatim — so `--remote-debugging-port` can be injected and CDP works. A dedicated `--user-data-dir` is mandatory (the single-instance lock is per profile; reusing the default profile means the port never opens). Verified on hardware: discovery via `Get-AppxPackage`, activation, CDP connection, and key selectors (input box, model trigger `GPT-5.6 Sol 高`, sidebar projects). Status is **`ready` with `driver: "gui"`**; this supersedes the earlier `codex exec` headless path. Details: [codex-gui-cdp.en.md](codex-gui-cdp.en.md).
+`status` semantics: `ready` = the loop is verified on this platform; `research` = implemented but the matrix is not
+covered (**still executable**); `unsupported` = explicitly unsupported.
 
-> Corrections: earlier versions wrongly concluded "Trae not installed" (only `%APPDATA%` checked); the real install was found under `D:\`. Zcode was earlier marked "pending product confirmation"; the real install under `D:\Z-Code` settled it as unsupported. TraeWork was marked unsupported based on the headless-CLI test only; the CDP GUI route was later verified and integrated.
+## Why all three GUI agents must go through CDP
+
+| Constraint | Explanation |
+|---|---|
+| **No headless CLI** | Neither TraeWork nor ZCode ships any agent-driving subcommand (per-agent evidence below). |
+| **Requests encrypted inside the client** | TraeWork's agent requests are TDE-encrypted at the TTNet layer and cannot be constructed outside the client → driving the full client is the only viable path. |
+| **MSIX cannot be launched directly** | The Codex desktop app is an MSIX store package and a GUI host cannot `CreateProcess` it → COM activation plus a dedicated `user-data-dir` is required. |
+
+## Codex desktop (`codex-gui`, status `ready`)
+
+The Codex desktop app ships a kernel CLI, yet **the built-in adapter takes the GUI route**:
+
+- **GUI route (built-in)**: same entry point the user uses daily, with full model / reasoning-level / project-binding
+  capability; it needs MSIX COM activation plus a dedicated `user-data-dir` before a CDP port will open.
+- **Headless route (user-defined profile)**: when you would rather not depend on GUI automation, add a
+  `driver: "spawn"` profile in the data home to go through `codex exec`. See the "Headless path: codex-cli" section
+  of the [README](../README.en.md).
+
+> With `codex exec`, note that `--sandbox` and `--approve-for-me` are **mutually exclusive**; for non-interactive
+> automation `--sandbox workspace-write` suffices (approval output reads never in practice). `-C/--cd` sets the
+> working root and pairs with `cwd: "task"` as a double safeguard; `--json` emits JSONL events and
+> `-o/--output-last-message` captures the final message.
+
+GUI-route details (MSIX discovery, COM activation, CDP, selectors, liveness) are in
+[codex-gui-cdp.en.md](codex-gui-cdp.en.md).
+
+## ZCode desktop (`zcode-gui`, status `research`)
+
+**Conclusion: the headless route is unsupported; the GUI route is implemented.**
+
+Evidence (headless route only):
+
+- The install directory is a standard Electron layout (`ZCode.exe` + `resources/app.asar`) with no `cli.js`,
+  headless launcher or `cli.exe`.
+- `resources/tools/` bundles only `cua-helper` (computer-use), `ripgrep`, `ugrep` and similar internal helpers —
+  no agent-driving command.
+- The application's runtime data directory (sessions plus config) **is not an executable entry point** — discovery
+  must exclude it rather than mistaking a data file for a CLI.
+- No `zcode` command exists on `%PATH%` or in the npm global prefix.
+
+The built-in adapter therefore drives the desktop UI over CDP, supporting `needs_user` / `continue_task` and
+automatic acceptance/rework. Implementation and pitfalls are in [zcode-cdp.en.md](zcode-cdp.en.md).
+
+> `status` stays `research` because the Windows loop is complete while the cancel / rework / new-project matrix is
+> not covered on darwin.
+
+## TraeWork / TRAE SOLO CN (`traework-gui`, status `ready`)
+
+**Conclusion: there is indeed no headless CLI — but the CDP GUI route works, is implemented and verified on real
+hardware.**
+
+Headless-route evidence:
+
+- The app is Electron (product.json `name: TRAE SOLO CN`) and the CLIs it exposes are only VS Code family commands
+  (`open`, `serve-web`, `install-extension`, `list-extensions`, `tunnel`, `command`, …) — **no headless agent-driving
+  subcommand at all**.
+- Searching the whole install directory finds no standalone agent CLI binary.
+- The `byted-solo.builtin-mcp` extension is an **MCP client** extension (for connecting MCP servers inside the IDE),
+  which is an IDE-side capability and **not a headless interface this server can call externally**.
+
+GUI route (integrated):
+
+- Connection: `TRAE SOLO CN.exe --remote-debugging-port=<port>` → `GET /json` to obtain the page WebSocket.
+- Measured selectors: chat input, new task, task list, mode switcher, model dropdown, project folder dropdown.
+- Project registration: when the dropdown misses, the path is written through the native Windows dialog.
+- End to end: `run_task(agentId="traework", model=..., autoVerify=true)` drove it to create a file and passed
+  acceptance.
+
+**Why not connect over HTTP directly**: agent requests are TDE-encrypted at the TTNet layer and cannot be constructed
+outside the client; driving the full client over CDP is the only viable path.
+
+Implementation and pitfalls: [traework-cdp.en.md](traework-cdp.en.md).
+
+## Adding a new agent (three steps)
+
+1. **Add a profile in the data home** (see [agent-profiles.en.md](agent-profiles.en.md)); when the defaults suffice
+   this means **zero code**.
+2. **Implement an `AgentAdapter` when custom output parsing is needed** (e.g. a non-zero exit code that still means
+   success, or JSON results to parse) and `registry.register(id, adapter)`.
+3. **Verify**: self-check executable discovery with `get_profiles`, then run one stub or real-machine smoke task
+   through to a passing acceptance.
+
+### Candidate evaluation checklist
+
+Before integrating a new agent, confirm each item:
+
+| Question | If "no" |
+|---|---|
+| Does it have an official headless CLI/API? | Take the GUI route, subject to the four factors below |
+| Can the GUI route verify **product identity** (window/page identity)? | Do not integrate |
+| Can it verify **process ownership** (the process owning the debug port)? | Do not integrate |
+| Can it verify **project binding** (a full-path criterion)? | Do not integrate |
+| Can it verify **session/run state** (run signal, completion marker)? | Do not integrate |
+
+If any of the four factors cannot be verified strictly, do not integrate — it is better to omit an adapter than to
+build one that could misoperate a real workspace.
+
+## Platform status
+
+| Agent | Windows | macOS | Notes |
+|---|---|---|---|
+| `codex` | `ready` | `research` | The basic macOS loop is verified on real hardware; the cancel/rework matrix is not covered |
+| `zcode` | `research` | `research` | The basic loop is verified on both; cancel/rework/new-project is not covered |
+| `traework` | `ready` | Not integrated (fail-closed) | Native dialog driving has not been measured on macOS |
+| `stub` | Tests only | Tests only | Not part of the real-machine matrix |

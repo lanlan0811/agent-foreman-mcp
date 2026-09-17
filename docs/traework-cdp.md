@@ -26,7 +26,7 @@ CDP 驱动走的是完整客户端链路：renderer → ai_agent → TDE → 网
 - TraeWork 已安装且**已登录**
 - TraeWork 以调试端口启动，且**窗口保持可见**（发送依赖模拟输入）：
   ```bat
-  "D:\TRAE Work CN\TRAE SOLO CN.exe" --remote-debugging-port=9222
+  "<TraeWork 安装目录>\TRAE SOLO CN.exe" --remote-debugging-port=9222
   ```
 - 无需安装额外依赖：CDP 客户端只用 Node 内置 `http` + 全局 `WebSocket`（Node ≥ 20）
 
@@ -67,7 +67,7 @@ run_task({
 9. **验收失败**：自动生成修复计划文件 `rework-<taskId>-r<N>.md`，并把文件名写进同会话的返修消息
 10. **再验收**，直到通过或轮次用尽（`needs_attention`）
 
-> **为什么第 4 步在绑定之前？** 实测（2026-09-08）：TraeWork 的 Work/Code/Design **各自维护独立的项目绑定**，
+> **为什么第 4 步在绑定之前？** TraeWork 的 Work/Code/Design **各自维护独立的项目绑定**，
 > 切换模式会把输入栏项目换成该模式上次使用的项目。因此必须先切模式、再在目标模式里绑定项目。
 >
 > **非 Work 模式的兜底**：若在目标模式（Code/Design）绑定失败，会自动**回落 Work 模式重试一次**，
@@ -80,7 +80,7 @@ run_task({
 > 而 `solo-lite.local-project-folders` 只是本地路径回填缓存，两者不是同一份数据。
 > 因此「项目已在 map 里」不代表下拉能命中，未命中仍会走原生对话框。
 
-真机探针（诊断用，需 TraeWork 在跑）：
+诊断探针（需 TraeWork 正在运行）：
 
 ```bash
 node scripts/probe-traework.mjs selectors          # 检查选择器是否命中
@@ -105,7 +105,6 @@ node scripts/probe-traework.mjs send "任务书"       # 端到端发一条并�
       "command": null,          // 留空则用 executableDiscovery 探测
       "executableDiscovery": {
         "dirs": [
-          "D:/TRAE Work CN",
           "{PROGRAMFILES}/TRAE WORK CN",
           "{LOCALAPPDATA}/Programs/TRAE WORK CN",
           "/Applications/TraeWork.app/Contents/MacOS"
@@ -156,7 +155,7 @@ UI 升级导致选择器失效时，**无需改代码**——在 `gui.selectors`
 
 ---
 
-## 5. 实测选择器清单（TraeWork 1.107.1）
+## 5. 选择器清单（实测）
 
 | 语义键 | 选择器 | 说明 |
 |---|---|---|
@@ -217,7 +216,7 @@ UI 升级导致选择器失效时，**无需改代码**——在 `gui.selectors`
 
 ---
 
-## 8. 实测踩坑记录
+## 8. 踩坑记录
 
 | 现象 | 根因 | 处理 |
 |---|---|---|

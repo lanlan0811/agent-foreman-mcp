@@ -1,8 +1,13 @@
-# 视觉验收（开发中，目标 v0.5.0）
+# 视觉验收（visual-acceptance.md）
 
 [English](visual-acceptance.en.md)
 
-视觉验收复用 `run_task`、`verify_task`、`get_task_report`、`query_task` 和 `rework_task`，支持客观页面截图对比与静态图片规格检查。**客观检查无 AI 参与**；可选的 AI 内容校验默认关闭，由用户自备命令提供判定（见「AI 内容校验」）。官网代码不参与本模块开发。
+视觉验收复用 `run_task`、`verify_task`、`get_task_report`、`query_task` 与 `rework_task`，在项目启用后自动生效，**不需要新工具**。它支持客观页面截图对比与静态图片规格检查：
+
+- **像素与规格检查无 AI 参与**：确定性比对，结论可复现，不引入模型调用；
+- **可选的 AI 内容校验默认关闭**：校验图片/截图内容是否符合你显式声明的期望，判定**委托给你自备的本地命令**（MCP 不读取任何密钥，见「AI 内容校验」）。
+
+未启用时本模块对既有行为零影响。验证口径与覆盖边界见 [视觉验收验证状态](visual-validation.md)。
 
 ## 安装与环境
 
@@ -16,7 +21,13 @@ agent-foreman-mcp visual init /path/to/project
 
 固定依赖为 puppeteer-core 24.43.1、@puppeteer/browsers 2.13.2、sharp 0.34.5、pixelmatch 7.2.0。安装器从 Puppeteer 的 revision 映射读取浏览器版本。浏览器缓存位于 MCP 数据目录的 `browsers`。缺少可选 sharp 时执行 `npm install --include=optional`；缺失依赖不会阻止旧 MCP 功能启动。
 
-Windows 10 x64 本机最小启动与截图已验证：Windows 10 Pro 10.0.19045、Node 24.18.0、Chrome 148.0.7778.97，2026-09-14。macOS 13+ Intel/Apple Silicon 和其他 Node 版本的真实视觉证据尚待验证，不能据此宣称全部兼容性验收完成。完整验证记录见 [验证进度](visual-validation.md)。
+**平台验证以 CI 矩阵为事实来源**：真实浏览器与图像验收在 CI 的 `visual-browser` job 上按 ubuntu / windows / macos-15-intel / macos-15 × Node 20/22/24 全矩阵执行（含受管浏览器安装与生产 tarball 消费者验收）。本地复算：
+
+```sh
+AGENT_FOREMAN_VISUAL_BROWSER_TEST=1 npx vitest run visual --maxWorkers=1
+```
+
+未设置该开关时相关用例默认跳过。各平台注意事项与已知限制见 [视觉验收验证状态](visual-validation.md)。
 
 ## 项目配置
 

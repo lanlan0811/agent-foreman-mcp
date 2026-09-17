@@ -250,20 +250,17 @@ run_task(projectPath=/path/to/项目, agentId=codex-cli, task="任务书", autoV
 
 ### 贡献者
 
-感谢为本项目做出贡献的社区成员（按首次参与顺序排列）。其中部分成员在项目的前身 tianshu-mcp 时期参与贡献，其贡献随代码一并承继：
+感谢所有为本项目做出贡献的人。名录按**首次参与顺序**排列，虚位以待：
 
 <table>
   <tr>
-    <td align="center"><a href="https://github.com/liuchsong"><img src="https://github.com/liuchsong.png" width="72" height="72" alt="liuchsong" /><br /><sub>liuchsong</sub></a></td>
-    <td align="center"><a href="https://github.com/a13612745638"><img src="https://github.com/a13612745638.png" width="72" height="72" alt="a13612745638" /><br /><sub>a13612745638</sub></a></td>
-    <td align="center"><a href="https://github.com/king195547"><img src="https://github.com/king195547.png" width="72" height="72" alt="king195547" /><br /><sub>king195547</sub></a></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="https://github.com/zhaoxc857"><img src="https://github.com/zhaoxc857.png" width="72" height="72" alt="zhaoxc857" /><br /><sub>zhaoxc857</sub></a></td>
-    <td align="center"><a href="https://github.com/jian-in"><img src="https://github.com/jian-in.png" width="72" height="72" alt="jian-in" /><br /><sub>jian-in</sub></a></td>
-    <td align="center"><a href="https://github.com/huiliyi37"><img src="https://github.com/huiliyi37.png" width="72" height="72" alt="huiliyi37" /><br /><sub>huiliyi37</sub></a></td>
+    <td align="center"><sub>虚位以待<br />(your name here)</sub></td>
+    <td align="center"><sub>虚位以待<br />(your name here)</sub></td>
+    <td align="center"><sub>虚位以待<br />(your name here)</sub></td>
   </tr>
 </table>
+
+> 想出现在这里？请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 后提交 Issue 或 Pull Request。合并后你的名字会按首次参与顺序补入上表。
 
 ## 许可
 

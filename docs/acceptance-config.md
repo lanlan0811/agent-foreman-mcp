@@ -54,7 +54,7 @@
   - `git-diff-check`：`git diff --check`（空白错误）；非 git 仓库自动跳过。
 - 若配置缺失/解析失败，自动落回更低优先级来源，最终为空则只有内置检查，并在报告注明。
 
-## 默认集（无任何配置时自动推导，v1 覆盖）
+## 默认集（无任何配置时自动推导）
 
 | 检测到 | 检查 | 缺失处理 |
 |---|---|---|
@@ -67,7 +67,7 @@
 
 > 规则数据化，可后续扩展；不需要改代码。
 
-## 检查语义（R4 定稿）
+## 检查语义
 
 - **optional:true**：该检查失败只记为 warning（`report.message` 标注 "optional 检查未通过"），**不影响本轮 verdict**；必选（默认）失败才使 verdict=failed。
 - **extraChecks 追加**：默认 `checksMode:"append"`——先解析项目/默认检查，再**追加** extraChecks（不削弱基础门禁）。`checksMode:"replace"` 才完全替换为只跑 extraChecks。

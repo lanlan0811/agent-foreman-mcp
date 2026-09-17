@@ -3,8 +3,7 @@
 The agent-foreman-mcp Codex adapter drives the OpenAI Codex desktop app (the ChatGPT desktop application) through the full loop: locate install → launch GUI → bind/create project → select model and reasoning level → send instructions → run detection → verify → repair.
 
 - Implementation: `src/agents/codex/**`
-- Plan: `.agent-foreman/plans/codex-gui-adapter-plan.md`
-- Status: verified on Windows real hardware; macOS is `research` (unverified, excluded from readiness)
+- Status: `ready` on Windows; the basic macOS loop is verified and stays `research` until the cancel/rework matrix is complete
 - Related: [adapter-matrix.en.md](adapter-matrix.en.md), [agent-profiles.en.md](agent-profiles.en.md), [acceptance-config.md](acceptance-config.md)
 
 ---
@@ -83,7 +82,7 @@ A separate profile **loses no data**: projects, sessions and auth live in `~/.co
 | `permissionTrigger` | `button[aria-label="更改权限"]` | text e.g. "完全访问" |
 | `messageArea` | `[class*="MainContentSurface"]` | Text-stability fallback; **never bare `main`/`#root`** (they include nav chrome) |
 
-**Real-hardware pitfall (fixed)**: the top menu bar (File/Edit/View/Help) also carries `aria-haspopup="menu"`; without exclusion `modelTrigger` matched the menubar. Selectors therefore support `excludes` (`[role="menubar"]`, `header`), and the CDP layer additionally picks the bottom trigger by "text looks like a model". Verified on hardware: it resolves to `GPT-5.6 Sol 高`.
+**Pitfall (fixed)**: the top menu bar (File/Edit/View/Help) also carries `aria-haspopup="menu"`; without exclusion `modelTrigger` matched the menubar. Selectors therefore support `excludes` (`[role="menubar"]`, `header`), and the CDP layer additionally picks the bottom trigger by "text looks like a model". It resolves to a `<model name> <level>` form.
 
 Multilingual: every key ships bilingual candidates (`texts` / `ariaLabels`) plus a structural fallback; `gui.selectors` (semantic key → selector) hot-patches UI drift at runtime.
 
@@ -94,14 +93,14 @@ Multilingual: every key ships bilingual candidates (`texts` / `ariaLabels`) plus
 - `model`: e.g. `GPT-5.6 Sol`
 - `reasoningLevel`: `低/中/高` or `low/medium/high` (normalized internally to `low|medium|high`)
 
-**Actual UI structure (measured on hardware; differs from the original assumption)**: after opening the model menu —
+**Actual UI structure (measured; differs from the original assumption)**: after opening the model menu —
 
 1. **Models** are `role="menuitemradio"` candidates; the current one has `aria-checked="true"`. Select by exact visible text.
 2. **Reasoning strength is a slider** (`role="slider"`, `aria-valuemin=0` / `aria-valuemax=4`), **not a menu item**:
    its five stops are labelled **轻度(0) / 中(1) / 高(2) / 极高(3) / 极高(4)**.
    Drive it by focusing the slider and pressing Left/Right arrows (return to minimum first, then step up, so the result does not depend on the starting position). Hence "高" is `aria-valuenow=2`.
 
-> An early implementation clicked the reasoning strength like a menu item, which **could never set it** (exposed by hardware testing); it now drives the slider with arrow keys. Also, level comparison must be **exact** — the UI contains both "高" and "极高", so a substring match would misread a manually-set "极高" as satisfying "高".
+> An early implementation clicked the reasoning strength like a menu item, which **could never set it** (exposed by testing); it now drives the slider with arrow keys. Also, level comparison must be **exact** — the UI contains both "高" and "极高", so a substring match would misread a manually-set "极高" as satisfying "高".
 
 Read-back: while the menu is open the trigger's own text is unreadable, so read the in-menu "选择模型" item text (e.g. `GPT-5.6 Sol 高`) instead, then re-check the trigger text after closing the menu; both reads wait for UI re-render to avoid empty values. Retry ≤3 times, then abort with `model_mismatch`.
 
@@ -109,16 +108,16 @@ Read-back: while the menu is open the trigger's own text is unreadable, so read 
 
 `src/agents/codex/project.ts` + `run.ts`.
 
-- **Match rule (decision 2)**: match the target directory's **basename** against Codex's project display names, case-insensitively on Windows; multiple hits → `project_ambiguous`, never guess.
+- **Match rule **: match the target directory's **basename** against Codex's project display names, case-insensitively on Windows; multiple hits → `project_ambiguous`, never guess.
 - **Existing project**: click `在 <name> 中开始新聊天` (fallback to `<name> 的项目操作`) → confirm by reading back the bottom workspace chip.
 - **New project (two-tier strategy)**:
   1. **Automatic registration first** (`src/agents/codex/registry.ts`; deterministic, preferred): write the target directory into Codex's project state `~/.codex/.codex-global-state.json` under `local-projects` + `project-order`, equivalent to the user creating the project once inside Codex. Constraints: **idempotent** (no-op if already registered), **backup before writing** (`.agent-foreman-backup.json`, never overwriting an existing backup), **atomic write**, only these two keys are touched, and it only runs while the **MCP-managed instance is stopped** (so a running Codex cannot overwrite it); the user's own default-profile instance is never touched. On non-Windows / missing or unparseable state file → returns `skipped` and falls back to tier 2.
   2. **UI creation** (fallback, matching the screenshot flow): click the project picker → "新建项目" → click the **center blank area** of "源文件夹" (**not** "创建项目" directly) → the Windows **native** folder dialog opens → keyboard-automate the **backslash** absolute path and confirm → confirm the source folder is populated → click "创建项目".
 
-> Automatic registration removes the "unregistered project stuck at project creation" pain: on hardware, an
+> Automatic registration removes the "unregistered project stuck at project creation" pain: after automatic registration, an
 > unregistered directory was registered automatically and then completed the bound path end to end
 > (bind → model/level → permission → send → task done). Note registration stops the managed instance first,
-> so that round is the first task and requires a cold start (about 85s on hardware; `launchTimeoutMs` was
+> so that round is the first task and requires a cold start (noticeably slower than later rounds; `launchTimeoutMs` was
 > raised to 150s).
 
 The native dialog is unreachable from CDP, so `src/agents/codex/dialog.ts` drives it with UIA + `SendInput`, **fail-closed**:
@@ -129,29 +128,29 @@ The native dialog is unreachable from CDP, so `src/agents/codex/dialog.ts` drive
 - Address bar not uniquely locatable / not navigated to the target path / confirm button not ready / dialog still open after submit → abort, never guess.
 - `closeStrayDialogs` clears leftover native dialogs at startup (otherwise they occlude the UI and block the next run).
 
-**Two crucial hardware findings**:
+**Two crucial findings**:
 
 1. **A trusted click is mandatory**: `element.click()` produces an untrusted event the app ignores, so no native picker appears. You must dispatch real mouse events via CDP `Input.dispatchMouseEvent`, and validate the hit with `elementFromPoint` ("源文件夹" is an unclickable `<label>`; the real target is the button labelled "添加 Codex 可读取和编辑的文件夹").
 2. **The app window must be foreground**: the native picker only opens when the app window is active. Windows' foreground lock refuses `SetForegroundWindow` from background processes, so this adapter raises the window via **app-model activation** (COM — the same sanctioned foreground request used for launching).
 
-> **Known limitation (stated honestly)**: the whole new-project path depends on the window being foreground. Every step was verified separately on hardware (the dialog really opens, keyboard automation submits, the create-project dialog shows the source folder), but in a **fully unattended** environment a system foreground policy that blocks raising the window can still fail with `project_create_failed`. Binding **existing projects** and the rest of the flow (including verification/repair) are unaffected and have a stable hardware loop.
+> **Known limitation**: the whole new-project path depends on the window being foreground. Every step is verified separately (the dialog really opens, keyboard automation submits, the create-project dialog shows the source folder), but in a **fully unattended** environment a system foreground policy that blocks raising the window can still fail with `project_create_failed`. Binding **existing projects** and the rest of the flow (including verification/repair) are unaffected and have a stable loop.
 
 ## 8. Run detection
 
-`src/agents/codex/liveness.ts` (decisions 7/8):
+`src/agents/codex/liveness.ts` :
 
 1. **The stop button is the authoritative running signal**: its presence means `running`; never declare completion then.
 2. **Text stability counts as completion evidence only after a running signal was observed** — this avoids declaring "still generating but the DOM happens to be static" as complete when the stop-button selector drifts (the lesson from TraeWork's early misjudgement).
 3. If a running signal is **never observed** → do not declare completion; switch to idle timing and eventually `idle_timeout`: end the round but **keep the instance** (fail-open, no worse than the status quo).
 4. Total timeout `taskTimeoutMs` (default 30 min) + idle timeout `idleTimeoutMs` (default 10 min).
 
-> The stop button is confirmed on hardware: while generating, `button[aria-label*="停止"]` appears; the measured verdict log reads `pending → running(stop_button) → finished(stop_button_gone+text_stable)`. If a future version changes the wording and the selector misses, rule 3 above (fail-open) applies and completion is never misjudged.
+> The stop button is confirmed: while generating, `button[aria-label*="停止"]` appears; the measured verdict log reads `pending → running(stop_button) → finished(stop_button_gone+text_stable)`. If a future version changes the wording and the selector misses, rule 3 above (fail-open) applies and completion is never misjudged.
 
 ## 9. Verification and repair
 
-- **Verification (decisions 9/20)**: reuses the existing `AcceptanceEngine` (`src/verify/acceptance.ts`); priority is `extraChecks` > project `.agent-foreman/acceptance.json` > `projects.json` records > **default set**; the default set derives `typecheck/lint/test/build` from `package.json` `scripts`. When no command is runnable it is labelled **weak verification** (`src/agents/codex/verify.ts`).
-- **Repair plan (decisions 11/12)**: on verification failure the **MCP generates** the plan document, inside the **project** at `gui.fixPlanDir` (default `.agent-foreman/plans/`), named `codex-fix-r<N>.md` (**with round number, one per round, never overwritten**). Because the filename is known before sending, it can be referenced directly in the repair instruction without reading it back from the reply.
-- **Repair loop (decision 10)**: up to `autoFixRounds` rounds (Codex default **5**); each round sends a repair instruction to the **same session** (citing that md plus the raw failure output), then re-verifies. Exhausted rounds → `needs_attention`.
+- **Verification **: reuses the existing `AcceptanceEngine` (`src/verify/acceptance.ts`); priority is `extraChecks` > project `.agent-foreman/acceptance.json` > `projects.json` records > **default set**; the default set derives `typecheck/lint/test/build` from `package.json` `scripts`. When no command is runnable it is labelled **weak verification** (`src/agents/codex/verify.ts`).
+- **Repair plan **: on verification failure the **MCP generates** the plan document, inside the **project** at `gui.fixPlanDir` (default `.agent-foreman/plans/`), named `codex-fix-r<N>.md` (**with round number, one per round, never overwritten**). Because the filename is known before sending, it can be referenced directly in the repair instruction without reading it back from the reply.
+- **Repair loop **: up to `autoFixRounds` rounds (Codex default **5**); each round sends a repair instruction to the **same session** (citing that md plus the raw failure output), then re-verifies. Exhausted rounds → `needs_attention`.
 
 ## 10. Task parameters
 
@@ -173,32 +172,32 @@ The initial instruction reads: `根据计划文档(<planDoc>)和设计系统(<de
   "driver": "gui",
   "adapter": "codex-gui",
   "executableDiscovery": {
-    "appxPackageName": "OpenAI.Codex",                 // Appx query first
+    "appxPackageName": "OpenAI.Codex",  // Appx query first
     "installRelativeExe": ["app/ChatGPT.exe"],
     "scanRoots": ["{SYSTEMDRIVE}/Program Files/WindowsApps"],  // scan fallback
     "scanPattern": "OpenAI.Codex_*_x64__*/app/ChatGPT.exe"
   },
   "gui": {
-    "activation": "msix-com",                          // required: COM activation
-    "userDataDir": "{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile",  // required: dedicated profile
+    "activation": "msix-com",  // required: COM activation
+    "userDataDir": "{LOCALAPPDATA}/agent-foreman/codex-gui/profile",  // required: dedicated profile
     "cdpPort": 9333, "cdpPortAuto": true,
     "permissionMode": "完全访问",
     "fixPlanDir": ".agent-foreman/plans",
     "defaultAutoFixRounds": 5,
     "launchTimeoutMs": 60000, "pollIntervalMs": 3000,
     "stableRounds": 4, "idleTimeoutMs": 600000,
-    "selectors": {}                                     // hot-fix for UI drift
+    "selectors": {}  // hot-fix for UI drift
   }
 }
 ```
 
 ## 12. Troubleshooting
 
-Start with the hardware diagnostic script:
+Start with the diagnostic script (requires a real install):
 
 ```bash
-node scripts/probe-codex.mjs            # read-only: discovery + process/port status
-node scripts/probe-codex.mjs --launch   # full: activate managed instance + CDP + live selectors
+node scripts/probe-codex.mjs  # read-only: discovery + process/port status
+node scripts/probe-codex.mjs --launch  # full: activate managed instance + CDP + live selectors
 ```
 
 | Symptom | Likely cause | Action |
@@ -213,9 +212,34 @@ node scripts/probe-codex.mjs --launch   # full: activate managed instance + CDP 
 
 ## 13. Known limitations
 
-- The macOS path is unverified (`status: research`); its code is excluded from readiness.
-- **New-project creation depends on a foreground window**: the native picker only opens while the app is active. Every step was verified separately on hardware, but in a fully unattended environment where the system blocks raising the window it can return `project_create_failed`. Binding existing projects and the verification/repair loop are unaffected (stable hardware pass).
+- macOS cancel/rework/continue_task is not covered (`status: research`); the basic loop is verified (§14).
+- **New-project creation depends on a foreground window**: the native picker only opens while the app is active. Every step is verified separately, but in a fully unattended environment where the system blocks raising the window it can return `project_create_failed`. Binding existing projects and the verification/repair loop are unaffected (stable pass).
 - Codex's frontend text/selectors drift across versions; mitigated by bilingual candidates, structural fallbacks and `selectors` hot-patching.
 - The native folder dialog depends on UIA control structure (`AutomationId 1001/41477/1`), which system updates may change; failures are fail-closed and never misclick existing windows.
 - The managed instance and any instance the user opened manually do not interfere; still, **only one managed instance should exist at a time** (the adapter has a built-in serial gate).
-- This adapter supersedes the earlier `codex exec` headless CLI path (plan decision 19); headless execution would require a separate profile.
+- This adapter takes the GUI route; for headless execution (`codex exec`) add a separate `driver: "spawn"` profile (see the "Headless path: codex-cli" section of the [README](../README.en.md)).
+
+## 14. macOS support
+
+macOS has no MSIX, so `activation=spawn` (the profile supplies a per-platform default): the adapter spawns
+`/Applications/ChatGPT.app/Contents/MacOS/ChatGPT` directly (Electron is structurally the same as on Windows and
+accepts `--user-data-dir` / `--remote-debugging-port`; the dedicated profile remains a CDP prerequisite, as in §2).
+
+### macOS-specific conclusions (differences from Windows)
+
+1. **Login state**: the managed instance (dedicated user-data-dir) reuses the `~/.codex` login, so it is signed in on
+   first launch and the project list and sessions are visible (consistent with the "shared across profiles" note in §2).
+2. **Instance retention**: spawn must use `detached + unref` (POSIX process group). Without detachment, the parent
+   (server or probe) exiting takes the managed main process down with it (helpers that already called `setsid` survive).
+3. **Project registration**: the state file `~/.codex/.codex-global-state.json` is structurally identical across
+   platforms, so darwin also writes the registration directly (SIGTERM the managed instance first, then atomic write
+   plus backup); path comparison follows POSIX semantics and preserves case. **macOS therefore does not depend on the
+   native folder dialog** (that UIA route is Windows-only).
+4. **target replacement**: at the moment a turn completes or the page switches, the renderer can briefly stop
+   responding or even be replaced — a single hung `Runtime.evaluate` (15s timeout) does not mean CDP is dead. The poll
+   and send-confirmation loops reconnect on `CdpUnavailable`/`CdpDisconnected` (declaring `cdp_disconnected` only after
+   5 consecutive failures). Otherwise a task that actually succeeds slightly later would be misjudged as
+   `needs_attention`.
+5. **First-message queueing**: the managed profile's first send can queue for a long time (first-launch environment
+   initialization) with the composer showing a queued state; subsequent sends are immediate (the input clears and the
+   stop button appears at once). Allow a looser timeout for the first task accordingly.

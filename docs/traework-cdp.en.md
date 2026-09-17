@@ -28,7 +28,7 @@ from the DOM. This matches the mechanism already proven by the `oh-dsh-trae-api`
 - TraeWork installed and **logged in**
 - TraeWork started with a debug port, and the **window kept visible** (sending relies on simulated input):
   ```bat
-  "D:\TRAE Work CN\TRAE SOLO CN.exe" --remote-debugging-port=9222
+  "<TraeWork install dir>\TRAE SOLO CN.exe" --remote-debugging-port=9222
   ```
 - No extra dependencies: the CDP client uses only Node built-ins (`http` + global `WebSocket`, Node ≥ 20)
 
@@ -68,7 +68,7 @@ Execution sequence (mapping the 8 requested steps):
    filename in the rework message within the same session
 10. **Re-verify** until it passes or rounds are exhausted (`needs_attention`)
 
-> **Why does step 4 come before binding?** Measured (2026-09-08): TraeWork's Work/Code/Design modes
+> **Why does step 4 come before binding?** TraeWork's Work/Code/Design modes
 > **each keep an independent project binding** — switching modes replaces the input bar's project with
 > whatever that mode last used. So the mode must be switched first, then the project bound inside it.
 >
@@ -110,7 +110,6 @@ Built-in defaults live in `src/agents/builtin.ts`; the user data directory
       "command": null,          // empty = use executableDiscovery
       "executableDiscovery": {
         "dirs": [
-          "D:/TRAE Work CN",
           "{PROGRAMFILES}/TRAE WORK CN",
           "{LOCALAPPDATA}/Programs/TRAE WORK CN",
           "/Applications/TraeWork.app/Contents/MacOS"
@@ -162,7 +161,7 @@ Each key has a primary selector plus fallback candidates tried in order.
 
 ---
 
-## 5. Verified selectors (TraeWork 1.107.1)
+## 5. Selector list (measured)
 
 | Key | Selector | Notes |
 |---|---|---|
@@ -232,7 +231,7 @@ user's own running TraeWork instance (data intact, restarted). They are now hard
 
 ---
 
-## 8. Pitfall log (measured)
+## 8. Pitfall log
 
 | Symptom | Root cause | Fix |
 |---|---|---|

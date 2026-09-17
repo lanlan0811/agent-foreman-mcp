@@ -1,6 +1,6 @@
 /**
  * server.ts：组装 —— 加载配置、初始化数据目录/日志、TaskManager/AcceptanceEngine/
- * Registry、注册 9 个工具到 McpServer、触发技能自检安装。被 index.ts 调用以 stdio 启动。
+ * Registry、注册 11 个工具到 McpServer、触发技能自检安装。被 index.ts 调用以 stdio 启动。
  */
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

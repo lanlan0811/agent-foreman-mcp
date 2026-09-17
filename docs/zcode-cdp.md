@@ -2,7 +2,9 @@
 
 ## 状态
 
-ZCode 已从无头 CLI 占位升级为独立的 `zcode-gui` adapter。它通过 Electron 的本地 CDP 页面驱动 ZCode 主界面；Windows/macOS 原生自动化只处理由 ZCode 新打开的文件夹选择面板。内置 profile 当前仍为 `research`：Windows 10 已完成安装发现、版本读取和既有非 CDP 实例保护验证；macOS 基本闭环已真机验证（2026-09-13，见「真机证据状态」），取消/返修/新建项目（自动化面板）矩阵补齐前不得标为 `ready`。
+本适配器为独立的 `zcode-gui`：通过 Electron 的本地 CDP 页面驱动 ZCode 主界面；Windows/macOS 原生自动化只处理由 ZCode 新打开的文件夹选择面板。
+
+内置 profile 为 `research`——两侧平台的**基本闭环**（安装发现、CDP 启动与复用、项目绑定、模型与权限回读、发送、运行检测、验收通过）均已验证，但取消真停、同会话返修、`continue_task` 与新建项目（自动化面板）的端到端矩阵尚未覆盖；补齐之前不得标为 `ready`。平台覆盖现状见文末「平台覆盖现状」。
 
 ## 安装发现顺序
 
@@ -13,13 +15,13 @@ ZCode 已从无头 CLI 占位升级为独立的 `zcode-gui` adapter。它通过 
 5. PATH；
 6. macOS `/Applications/ZCode.app` 与 `~/Applications/ZCode.app` 的 `Contents/MacOS/ZCode`。
 
-`D:\Z-Code\ZCode\ZCode.exe` 只是当前 Windows 验收样本，由“D 盘优先 + 相对路径模板”发现，不是业务硬编码。运行 `node scripts/probe-zcode.mjs all` 可只读查看安装、版本、进程和 CDP 目标。
+Windows 上的安装位置由「固定盘优先 + 相对路径模板」等规则**动态发现**，不写死任何盘符或版本号；上表第 2 条的 `preferredDrives` / `relativePaths` 即为该机制的配置入口。运行 `node scripts/probe-zcode.mjs all` 可只读查看安装、版本、进程与 CDP 目标。
 
-## 诊断与真机冒烟
+## 诊断与冒烟
 
 `probe-zcode.mjs` 支持 `install`、`process`、`cdp`、`selectors`、`ui`、`projects`、`models`、`permission`、`liveness` 和 `session`。`models` 与 `permission` 会短暂打开对应菜单、读取稳定显示名和内部 ID，再关闭菜单；探针不会发送消息或改动账户、凭证与安全设置。
 
-仓库维护者可在明确同意把测试提示词发给 ZCode 后运行显式真机冒烟：
+维护者可在**明确同意把测试提示词发给 ZCode** 后运行显式冒烟（会真实发送消息）：
 
 ```powershell
 npm run build
@@ -78,7 +80,7 @@ continue_task(taskId=tsk_..., message=选择 PostgreSQL)
 
 ## 无项目（`default` 工作区）
 
-`projectPath` 可以省略（issue #12）。省略时任务在 ZCode 的 `default` 工作区运行：不分配目录、不登记或导入项目、不采集 Git 基线、不冻结项目快照、不进入项目锁，也不执行项目验收。
+`projectPath` 可以省略。省略时任务在 ZCode 的 `default` 工作区运行：不分配目录、不登记或导入项目、不采集 Git 基线、不冻结项目快照、不进入项目锁，也不执行项目验收。
 
 ```text
 run_task(
@@ -125,15 +127,16 @@ ZCode 专用可选布尔，只影响**有项目模式**：
 - 无项目模式停在 `needs_user/setup_recovery`：ZCode 当前仍绑定其他项目，或无法确认 `default` 工作区。请切换到未绑定项目的新会话后调用 `continue_task`。
 - 项目触发器相关失败不再统一成「等待超时」：文案会指出「不唯一（匹配 N）」「已挂载但不可见或被裁剪」「被其他元素遮挡」「点击后项目菜单未打开」中的具体一类，并附带 `selector`、匹配数与命中节点属性；诊断日志含尝试次数、实际耗时与剩余预算。
 
-## 真机证据状态（2026-09-11）
+## 平台覆盖现状
 
 | 平台 | 已验证 | 未完成 |
 |---|---|---|
-| macOS arm64 | 安装发现（`/Applications/ZCode.app`，3.11.2）、CDP 启动与复用（进程标题改写适配 + 端口段补扫）、静息选择器全命中、既存项目绑定回读、`bigmodel/GLM-5.3-Flash` 与「完全访问」回读、发送 → `stop_button` 运行证据 → `reply_stable`、真实文件开发与验收 PASS（diffstat +2 -0）、`succeeded`；手动驱动「打开文件夹」面板全流程（窗口形态 + AX 直写路径 → 确认 → 绑定成功） | 取消真停、同会话返修、`continue_task`、新项目（自动化面板）端到端；详见下节「macOS 特有结论」 |
+| Windows | 安装发现、CDP 启动与复用、项目绑定与回读、模型与「完全访问」回读、发送 → `stop_button` 运行证据 → `reply_stable`、真实文件开发与验收 PASS、`succeeded` | 取消真停、同会话返修、`continue_task`、新建项目（自动化面板） |
+| macOS | 安装发现（应用包路径）、CDP 启动与复用（进程标题改写适配 + 端口段补扫）、静息选择器全命中、既存项目绑定回读、模型与权限回读、发送 → 运行证据 → `reply_stable`、真实文件开发与验收 PASS、手动驱动「打开文件夹」面板全流程（窗口形态 + AX 直写路径 → 确认 → 绑定成功） | 取消真停、同会话返修、`continue_task`、新建项目（自动化面板）端到端；机制细节见下节「macOS 特有结论」 |
 
-Windows 闭环已完成；macOS 基本闭环已验证（2026-09-13），取消/返修/新建项目矩阵补齐之前，内置 profile 必须保持 `research`。
+**两侧平台的取消/返修/新建项目矩阵补齐之前，内置 profile 保持 `research`。**
 
-## macOS 特有结论（2026-09-13 真机）
+## macOS 特有结论
 
 1. **进程标题改写**：ZCode 主进程启动完成后把标题改写为 `ZCode`（`ps` 不再显示
    `--remote-debugging-port`）——端口归属判定从「argv 匹配」放宽为「端口上有 ZCode 页面 +
@@ -156,15 +159,15 @@ Windows 闭环已完成；macOS 基本闭环已验证（2026-09-13），取消/�
    （面板或 composer）正规登记。
 8. **新建任务按钮有两副面孔**：首页底部的 `conversation-new-task` 图标可能是惰性挂载
    （trusted 点击返回 true 但 composer 未打开）；侧栏 `[data-testid=task-new-button]` 大按钮
-   才是真入口。v0.3.4 流程在项目触发器未命中时回退侧栏按钮再重试（`newTaskSidebar` 键）。
+   才是真入口。因此项目触发器未命中时会回退到侧栏按钮再重试（`newTaskSidebar` 键）。
 
-## 无会话锚点的环境恢复（#9）
+## 无会话锚点的环境恢复
 
 关闭旧实例、登录或权限处理后，如果原任务尚无会话，continue_task 将重新采集发送前会话快照，再发送完整任务、上下文和已验证引用。确认文本不会发送给模型。已有会话的续答和返修仍须回选并核对原会话。
 
 发送确认与会话识别共用最多 60 秒、受任务剩余时间约束的观察窗口。优先任务标记，其次首次派发的唯一新会话差集；多个新会话时不能猜选当前活动面板。无法确认则保留现场并报告 send_unknown 或 session_lost，不自动重复发送。
 
-## 分阶段自动恢复（#10）
+## 分阶段自动恢复
 
 初始化按准备连接、面板基线、打开文件夹、提交路径和绑定确认分阶段进行。默认最多两分钟，且不超过任务剩余时间。恢复期间任务保持进行中并输出进度，不消耗自动返修轮数。配置见 [agent profiles](agent-profiles.md#zcode-初始化自动恢复)。
 

@@ -20,7 +20,7 @@
       "displayName": "Codex (OpenAI 桌面端 CLI)",   // 展示名
       "type": "cli",                                  // 目前仅 cli
       "driver": "spawn",                              // spawn=外部子进程（默认）；gui=桌面 UI 自动化
-      "adapter": "zcode-gui",                         // GUI 可选：traework-gui | zcode-gui；旧缺省按 TraeWork 兼容
+      "adapter": "zcode-gui",                         // GUI 可选：codex-gui | zcode-gui | traework-gui
       "status": "ready",                              // ready | research | unsupported
       "command": null,                                // 可执行；null + discovery 则自动探测
       "argsTemplate": ["exec", "<prompt:arg>", "--skip-git-repo-check"],
@@ -31,11 +31,11 @@
       "killTree": "taskkill",                         // taskkill | group
       "authNote": "复用 ~/.codex 登录态",              // 仅说明，不落密钥
       "executableDiscovery": {                        // 可执行自动发现（选填）
-        "dirs": ["C:/Users/<你>/AppData/Local/OpenAI/Codex/bin"],
+        "dirs": ["{LOCALAPPDATA}/OpenAI/Codex/bin"],
         "fileNames": ["codex.exe", "codex"],          // 无 fileNames 则目录不扫描
         "fallbackCommand": "codex",                   // 最后回退：PATH 查找
         "preferredDrives": ["D:"],                    // Windows 固定盘优先级
-        "relativePaths": ["Z-Code/ZCode/ZCode.exe"]   // 相对盘根候选
+        "relativePaths": ["<App>/<App>.exe"]             // 相对盘根候选（示例，按实际产品填）
       },
       "gui": {                                        // 仅 driver="gui" 使用（如 traework）
         "cdpPort": 9222, "cdpPortAuto": true, "cdpPortRange": 20,
@@ -55,7 +55,7 @@
 | 值 | 说明 |
 |---|---|
 | `spawn`（默认） | 拉起外部 CLI 子进程（`argsTemplate` + `promptMode`），结果按退出码判定 |
-| `gui` | 通过 CDP 驱动桌面 UI（当前仅 `traework`）；不 spawn 子进程，`run_task` 可传 `model` 指定其模型 |
+| `gui` | 通过 CDP 驱动桌面 UI（内置 `codex` / `zcode` / `traework` 走这条）；不 spawn 子进程，`run_task` 可传 `model` 指定其模型 |
 
 > `driver=gui` 时 `argsTemplate`/`promptMode` 不生效。显式 `adapter` 用于隔离 TraeWork 与 ZCode；旧 profile 缺失该字段时仍按 TraeWork 行为兼容。分别见 [traework-cdp.md](traework-cdp.md) 与 [zcode-cdp.md](zcode-cdp.md)。
 
@@ -80,11 +80,11 @@ TraeWork 存活检测相关字段：`stableRounds` 仅确认 DOM 已稳定；随
 3. `fallbackCommand` / 相对 command 在 PATH 中查找
 4. 全失败 → `ok:false`，`get_profiles` 会显示原因
 
-> Codex 桌面端为 MSIX 应用：自 2026-09-11 起用 `codex-gui`（GUI 驱动，见 [codex-gui-cdp.md](codex-gui-cdp.md)），**不再走 `codex exec`**。早期内核 CLI 的 `<hash>` 目录探测结论保留于 adapter-matrix 的 C1 节。
+> Codex 桌面端为 MSIX 应用，内置适配走 `codex-gui`（GUI 驱动，见 [codex-gui-cdp.md](codex-gui-cdp.md)）。若要无头执行（`codex exec`），另立一个 `driver: "spawn"` 的 profile 即可（见下方「无头路径示例」）。
 
-## 本机真实样例
+## 真实样例
 
-### Codex 桌面端（GUI 驱动，2026-09-11 Windows 真机已验证）
+### Codex 桌面端（GUI 驱动）
 
 ```jsonc
 // ~/.agent-foreman/agent-profiles.json （Windows 示例）
@@ -112,7 +112,7 @@ TraeWork 存活检测相关字段：`stableRounds` 仅确认 DOM 已稳定；随
       },
       "gui": {
         "activation": "msix-com",
-        "userDataDir": "{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile",
+        "userDataDir": "{LOCALAPPDATA}/agent-foreman/codex-gui/profile",
         "appxPackageName": "OpenAI.Codex",
         "cdpPort": 9333,
         "cdpPortAuto": true,
@@ -132,7 +132,7 @@ TraeWork 存活检测相关字段：`stableRounds` 仅确认 DOM 已稳定；随
 
 > **要点**：`activation: "msix-com"` 与 `userDataDir` 缺一不可——GUI 宿主 `ChatGPT.exe` 无法直启（策略拒绝），且复用默认 profile 时调试端口不会开启。详见 [codex-gui-cdp.md](codex-gui-cdp.md)。
 
-### 历史：Codex 内核 CLI（`codex exec`，已被 GUI 驱动取代）
+### 无头路径示例：Codex CLI（`codex exec`，用户自建 profile）
 
 ```jsonc
 {
@@ -141,7 +141,7 @@ TraeWork 存活检测相关字段：`stableRounds` 仅确认 DOM 已稳定；随
       "displayName": "Codex (桌面端 CLI)",
       "type": "cli",
       "status": "ready",
-      "command": "C:/Users/<你>/AppData/Local/OpenAI/Codex/bin/<hash>/codex.exe",
+      "command": null,   // 留空则按 executableDiscovery 自动探测
       "argsTemplate": ["exec", "<prompt:arg>", "--skip-git-repo-check", "--sandbox", "workspace-write"],
       "promptMode": "arg",
       "cwd": "task",
@@ -152,25 +152,25 @@ TraeWork 存活检测相关字段：`stableRounds` 仅确认 DOM 已稳定；随
 }
 ```
 
-> `<hash>` 目录随 Codex 更新，用 `executableDiscovery` 自动取最新。该路径已不作为内置默认。
+> `<hash>` 目录随 Codex 更新，因此用 `executableDiscovery` 自动取最新，不要把绝对路径写死。该 profile 不是内置默认，需用户自建。
 
 ## 状态与轮询语义
 
 | status | 含义 | run_task 行为 |
 |---|---|---|
 | `ready` | 已配 command / discovery 可解析 | 可跑 |
-| `research` | 实现已存在，但真机证据尚未完整（当前为 zcode） | 安装探测成功时可跑；否则立即失败并说明原因 |
+| `research` | 实现已存在，但平台矩阵尚未覆盖（当前为 zcode） | 安装探测成功时可跑；否则立即失败并说明原因 |
 | `unsupported` | 明确不支持（见 adapter-matrix.md） | 同上 |
 
-> `traework` 已于 2026-09-08 由 `unsupported` 改为 `ready` + `driver=gui`（CDP 驱动桌面 UI，见 [traework-cdp.md](traework-cdp.md)）。
+> `traework` 为 `ready` + `driver=gui`（CDP 驱动桌面 UI，见 [traework-cdp.md](traework-cdp.md)）。
 
-> `zcode` 使用 `driver=gui` + `adapter=zcode-gui`。`model` 必须是 `供应商/模型`，默认权限为“完全访问”、默认自动返修 2 轮。Windows 真机闭环已完成；macOS 真机证据完成前内置状态保持 `research`。
+> `zcode` 使用 `driver=gui` + `adapter=zcode-gui`。`model` 必须是 `供应商/模型`，默认权限为「完全访问」、默认自动返修 2 轮。Windows 闭环已完成，macOS 基本闭环已验证；取消/返修/新建项目矩阵补齐前保持 `research`。
 
-> `codex` 使用 `driver=gui` + `adapter=codex-gui` + `activation=msix-com`。任务参数含 `model`（如 `GPT-5.6 Sol`）、`reasoningLevel`（低/中/高 或 low/medium/high）、`planDoc`、`designSystem`；默认权限“完全访问”、默认自动返修 5 轮。Windows 真机已验证；macOS 内置状态为 `research`。详见 [codex-gui-cdp.md](codex-gui-cdp.md)。
+> `codex` 使用 `driver=gui` + `adapter=codex-gui` + `activation=msix-com`。任务参数含 `model`（以面板实际模型名为准）、`reasoningLevel`（低/中/高 或 low/medium/high）、`planDoc`、`designSystem`；默认权限「完全访问」、默认自动返修 5 轮。Windows 为 `ready`，macOS 为 `research`（取消/返修矩阵未覆盖）。详见 [codex-gui-cdp.md](codex-gui-cdp.md)。
 
 ## 常见问题
 
-- **探测到错误文件**：检查 `fileNames` 只写合法可执行名。ZCode 只探测桌面程序 `ZCode.exe`/macOS bundle，不把 `db.sqlite`、运行时数据或未公开的 app-server 当作入口。
+- **探测到错误文件**：检查 `fileNames` 只写合法可执行名。ZCode 只探测桌面程序（`ZCode.exe` / macOS bundle），不把运行时数据或未公开的内部服务当作入口。
 - **profile 改动不生效**：server 每次 resolve 会重读 profiles 文件并缓存结果；`get_profiles` 会触发一次新探测。改完 profile 建议重启 server。
 - **env 有敏感值**：仅本机可见，不会写入 task.jsonl/日志；属于自担风险字段。
 - **driver=gui 的 agent 找不到可执行**：`get_profiles` 会显示探测结果；可在 profile 里直接配 `gui.exePath` 指定绝对路径。

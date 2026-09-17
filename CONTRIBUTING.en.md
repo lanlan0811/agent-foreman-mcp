@@ -13,8 +13,8 @@ Chinese version: [CONTRIBUTING.md](CONTRIBUTING.md)
 |---|---|
 | Node.js | ≥ 20 (CI covers 20 / 22 / 24) |
 | Package manager | npm (the repo ships `package-lock.json`) |
-| OS | Windows / macOS / Linux (three-platform CI matrix) |
-| Git | Needed for baseline-analysis features and commits |
+| OS | Windows / macOS / Linux (CI three-platform matrix) |
+| Git | Used by baseline analysis and for committing |
 
 ## 2. Local development
 
@@ -26,20 +26,26 @@ npm run build         # sync-version + tsc → dist/
 npm test              # vitest (unit + integration + protocol)
 ```
 
-Scripts:
+Common scripts:
 
 | Command | Purpose |
 |---|---|
-| `npm run build` | Sync the version (`scripts/sync-version.mjs`) and compile to `dist/` |
-| `npm run dev` | Run `src/index.ts` directly via `tsx` (stdio server) |
-| `npm test` | Full test suite (vitest run) |
+| `npm run build` | Sync the version (`scripts/sync-version.mjs`) and compile into `dist/` |
+| `npm run dev` | Run `src/index.ts` directly through `tsx` (stdio server) |
+| `npm test` | Full test suite (vitest run; real-browser tests are skipped by default) |
 | `npm run test:watch` | Watch mode |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run typecheck` | `tsc --noEmit` type check |
 | `npm run lint` | ESLint with `--max-warnings 0` (zero tolerance) |
 | `npm run check:stdio` | Strict stdio protocol check (runs the built `dist`) |
-| `npm run check:stdio:src` | Same, but runs the source entry via `tsx` (no build needed) |
-| `npm run format` | Prettier over `src` and `test` |
+| `npm run check:stdio:src` | Same, but through `tsx` against the source entry (no build needed) |
+| `npm run format` | Prettier formatting for `src` and `test` |
 | `npm run pack:check` | `npm pack --dry-run` to inspect the published contents |
+
+**Real-browser tests** are skipped by default (`AGENT_FOREMAN_VISUAL_BROWSER_TEST !== "1"`). To reproduce visual acceptance locally:
+
+```bash
+AGENT_FOREMAN_VISUAL_BROWSER_TEST=1 npx vitest run visual --maxWorkers=1
+```
 
 ## 3. Required before committing (same as CI)
 
@@ -47,63 +53,73 @@ Scripts:
 npm run typecheck && npm run lint && npm test && npm run build && npm run check:stdio
 ```
 
-`check:stdio` spawns a real child process and validates the complete stdout/stderr byte stream per
-scenario: stdout may contain only newline-delimited, schema-valid MCP JSON-RPC messages (requests and
-response IDs checked); empty lines, non-JSON lines, parser errors, or trailing fragments at exit all
-fail the run. It covers six scenarios: first start, second start with matching skills,
-`--no-skill-install`, a corrupt `config.json`, logs while a stub task runs, and clean EOF shutdown.
+`check:stdio` captures the full stdout/stderr byte stream from a real subprocess and validates each scenario:
+stdout may contain only newline-delimited, valid MCP JSON-RPC messages (request/response IDs checked against the
+official schema). A blank line, a non-JSON line, a parser error or a stray fragment left at exit fails it. It covers
+six scenarios: first start, second start with matching skills, `--no-skill-install`, a corrupt config.json, logs
+while a stub task runs, and a clean EOF shutdown.
 
-CI enforces two extra checks — keep them in mind locally:
+CI checks two more things, so watch for them locally too:
 
-1. **No unexpected tracked diff after build**: `npm run build` rewrites `src/version.generated.ts`;
-   when bumping the version, commit that file together with `package.json`, otherwise CI's
-   "No unexpected tracked diff after build" fails.
-2. **Tarball contents and installed-package protocol**: CI installs the freshly built tarball into a
-   clean consumer directory, reads the installed bin dynamically, and reuses `scripts/check-stdio.mjs`
+1. **No unexpected tracked diff after the build**: `npm run build` rewrites `src/version.generated.ts`; when you change
+   the version that file must be committed together with `package.json`, otherwise CI's
+   "No unexpected tracked diff after build" step fails.
+2. **Tarball contents and installed-package protocol**: CI installs the generated tarball into a clean consumer
+   directory, dynamically reads the installed bin and reuses `scripts/check-stdio.mjs` for protocol validation
    (the consumer installs no dev dependencies).
 
 ## 4. Engineering conventions
 
-- **Language**: code comments, logs, error messages and docs are in Chinese; public docs must be
-  **bilingual in two separate files** (`X.md` and `X.en.md`).
-- **No hardcoding**: machine paths, usernames, ports, etc. go through profiles/config or placeholders
-  (e.g. `{LOCALAPPDATA}`); code provides discovery rules and defaults only.
-- **Cross-platform**: anything touching paths/processes/signals must handle both Windows and POSIX
-  (the three-platform CI matrix verifies this).
-- **SVG icons only**: emoji must not be used as icons.
-- **stdout is reserved for the MCP protocol**: runtime code under `src/**` must not call
-  `console.log/info/debug`; log through `src/util/log.ts` (which writes stderr via `console.error`).
-  ESLint's `no-console` enforces this, and `npm run check:stdio` covers new output with a real process.
+- **Language**: code comments, logs, error copy and documents are in Chinese; user-facing documents must be
+  **bilingual in two files** (`X.md` and `X.en.md`).
+- **No hardcoding**: machine paths, usernames and ports all come from profiles, configuration or placeholders
+  (e.g. `{LOCALAPPDATA}`, `{HOME}`); code contributes only discovery rules and defaults.
+- **Cross-platform**: anything touching paths, processes or signals must consider both Windows and POSIX
+  (CI's three-platform matrix verifies this).
+- **SVG for icons**: **emoji must never be used as an icon** (the same goes for status markers — use text instead).
+- **stdout carries MCP protocol only**: runtime code under `src/**` must not call `console.log/info/debug`; logs go
+  through `src/util/log.ts` to stderr (`console.error`). ESLint's `no-console` enforces this, and
+  `npm run check:stdio` catches new output with a real process.
+- **The return contract is add-only**: results carry both the text meta block and `structuredContent`, and field names
+  are **stable and add-only**. A new meta field must be registered in `META_BLOCK_FIELDS`
+  (`src/mcp/formatter.ts`) — protocol tests assert that no unregistered field appears.
 - **Zero lint warnings**: `npm run lint` runs with `--max-warnings 0`.
-- **Tests**: new features and fixes should ship with tests; prefer unit tests for pure functions and
-  integration/protocol tests for orchestration or protocol behavior.
-- **External input**: always validated with zod (`src/config/schema.ts`).
+- **Tests**: new features and bug fixes should ship with tests; pure functions get unit tests, while orchestration and
+  protocol work goes through integration or protocol tests.
+- **External input**: always validated through zod (`src/config/schema.ts`).
 
-## 5. Code map
+## 5. Code structure tour
 
 ```text
 src/
-├── index.ts              entry point (stdio)
+├── index.ts              entry (stdio / visual CLI dispatch)
 ├── server.ts             assembly: config/logging/manager/engine/registry/tool registration/skill self-install
-├── config/               zod schemas and data-dir persistence (hot reload)
-├── mcp/                  tool registry, handlers, context, result formatting (text + meta block)
+├── config/               zod schemas plus data-home read/write (hot reload)
+├── mcp/                  tool registry, handlers, context, result formatting (dual track: text meta block + structuredContent)
 ├── tasks/                task state machine, queue, concurrency gate, event-stream persistence
-├── loop/                 single-task orchestration (rework loop) and repair-plan generation
-├── agents/               adapter abstraction, registry, spawn wrapper, built-in profiles
-│   └── traework/         GUI driver (CDP client / selectors / launcher / UI / restricted computer-use)
+├── loop/                 per-task orchestration (rework loop) and repair-plan generation
+├── agents/               adapter abstraction, registry, spawn wrapper, built-in profiles, GUI instance lifecycle
+│   ├── codex/            Codex desktop GUI (MSIX discovery/COM activation/CDP/selectors/liveness/registration)
+│   ├── zcode/            ZCode GUI (discovery/CDP/project binding/model/recovery/references)
+│   └── traework/         TraeWork GUI (CDP client/selectors/UI/constrained computer-use)
 ├── verify/               acceptance engine (command checks + code analysis + git baseline + reports)
-└── util/                 logging, paths, files, timeouts
+├── visual/               visual acceptance (capture/compare/two-stage baselines/rule freezing/content validation/CLI)
+└── util/                 logging, paths, files, timeouts, etc.
 ```
 
 Test layers:
 
 | Layer | Location | Notes |
 |---|---|---|
-| Unit | `test/unit/` | Pure functions and component logic |
-| Integration | `test/integration/` | stub-agent 3 playbooks, TraeWork fake-CDP end-to-end |
-| Protocol | `test/protocol/` | Official SDK stdio/in-memory client asserting the tool surface and return format |
-| Real process | `scripts/check-stdio.mjs` | Strict stdio gate: real child-process byte stream, stdout may carry MCP messages only |
-| Real-machine probe | `scripts/probe-traework.mjs` | Requires a real TraeWork, **not in CI** |
+| Unit | `test/unit/` | Pure functions and component logic (including isolated skill-install verification) |
+| Integration | `test/integration/` | The stub agent's three plays run the full task loop, covering dispatch/acceptance/rework/cancel/timeout |
+| Protocol | `test/protocol/` | Official SDK in-memory client asserting the tool surface, the dual-track return contract and argument validation |
+| Real browser | `test/integration/visual-*.test.ts` | Requires `AGENT_FOREMAN_VISUAL_BROWSER_TEST=1`; skipped by default, but CI's `visual-browser` job runs them all |
+| Real process | `scripts/check-stdio.mjs` | Strict stdio gate: real subprocess byte stream, stdout may carry valid MCP messages only |
+| Real-machine probes | `scripts/probe-{codex,zcode,traework}.mjs` | Require the real desktop apps; **not run in CI** |
+
+> **When changing the project-level directory convention**, `test/test-utils.ts` and
+> `test/stub-agent/stub-agent.mjs` are the two files that touch everything.
 
 ## 6. Commits and branches
 
@@ -122,29 +138,36 @@ git push origin main
 ## 7. Versioning and releases
 
 - Versions follow Semantic Versioning. To release:
-  1. bump `version` in `package.json`;
-  2. run `npm run build` to sync `src/version.generated.ts`;
-  3. commit and push to both remotes;
-  4. tag (e.g. `v0.1.5`) and push the tag to both remotes → the `Release` workflow validates
-     `tag == package.json == tarball` and creates a GitHub Release (draft, publish manually);
-  5. `npm publish --registry=https://registry.npmjs.org --access public`.
-- Record the change in [CHANGELOG.md](CHANGELOG.md) / [CHANGELOG.en.md](CHANGELOG.en.md).
+  1. change `version` in `package.json`;
+  2. refresh `package-lock.json` with `npm install --package-lock-only`;
+  3. run `npm run build` to sync `src/version.generated.ts`;
+  4. commit and push;
+  5. create and push a tag (e.g. `v1.0.0`) → the `Release` workflow validates
+     `tag == package.json == tarball`, requires a successful CI run for the same SHA, composes the body from the
+     bilingual release notes and then **publishes directly** (`draft: false`);
+  6. `npm publish --registry=https://registry.npmjs.org --access public`.
+- Before releasing you **must** have `docs/release-v<version>.md` and `.en.md` in place — `release.yml` fails
+  outright when a document is missing.
+- Record every change in [CHANGELOG.en.md](CHANGELOG.en.md) (and the Chinese
+  [CHANGELOG.md](CHANGELOG.md)).
+- The complete release process lives in [docs/npm-publish-guide.en.md](docs/npm-publish-guide.en.md).
 
-## 8. Adding a new external AI-Agent
+## 8. Adding an external AI agent
 
-In most cases **no code change is needed** — add a profile to the data-dir `agent-profiles.json`:
+In most cases **no code change is needed** — add a profile to `agent-profiles.json` in the data home:
 
-1. Follow the field reference in [docs/agent-profiles.en.md](docs/agent-profiles.en.md).
-2. CLI agents: configure `command` / `argsTemplate` / `promptMode` / `cwd`;
-   GUI agents: configure `driver: "gui"` plus the `gui` section.
-3. If output parsing needs special semantics (e.g. non-zero exit but success), implement an
-   `AgentAdapter` and register it in the registry.
-4. Self-check discovery with `get_profiles`, then run one real task through acceptance.
+1. Consult the field reference in [docs/agent-profiles.en.md](docs/agent-profiles.en.md);
+2. CLI agents: set `command` / `argsTemplate` / `promptMode` / `cwd`;
+   GUI agents: set `driver: "gui"` plus the `gui` block;
+3. Only if the output parsing carries special semantics (e.g. a non-zero exit code that still means success)
+   implement an `AgentAdapter` and register it;
+4. Self-check the executable discovery with `get_profiles`, then run one real task to acceptance.
 
 ## 9. Reporting issues
 
 - Bugs / feature requests: use the repository issue templates (`.github/ISSUE_TEMPLATE/`).
-- Security vulnerabilities: **do not** open a public issue; report privately per [SECURITY.en.md](SECURITY.en.md).
+- Security vulnerabilities: **do not** open a public issue; report privately following
+  [SECURITY.en.md](SECURITY.en.md).
 
 ## 10. Code of conduct
 

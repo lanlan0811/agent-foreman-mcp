@@ -1,5 +1,5 @@
 /**
- * 工具注册表：9 个工具的 name/description/inputSchema/capability/approval 元数据。
+ * 工具注册表：11 个工具的 name/description/inputSchema/capability/approval 元数据。
  * MCP 层用 inputSchema 声明；capability/requireApproval 供宿主 policy（§5/§11.3）。
  * 能力标注遵守 R11：读/查询/验收 read；run/cancel/rework write + requireApproval。
  */

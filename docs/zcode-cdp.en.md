@@ -2,7 +2,9 @@
 
 ## Status
 
-ZCode now has a dedicated `zcode-gui` adapter instead of a headless-CLI placeholder. It drives the Electron UI through a local CDP endpoint; native Windows/macOS automation is limited to the folder picker opened by ZCode. The built-in profile remains `research`: Windows 10 installation discovery, version reading, and protection of a running non-CDP instance are verified, while complete macOS hardware evidence is not yet recorded. It must not be marked `ready` before both platforms pass.
+This adapter is the dedicated `zcode-gui`: it drives the Electron UI through a local CDP endpoint, and native Windows/macOS automation is limited to the folder picker that ZCode itself opens.
+
+The built-in profile is `research` — the **basic loop** (installation discovery, CDP launch and reuse, project binding, model and permission read-back, dispatch, liveness, acceptance passing) is verified on both platforms, but the end-to-end matrix for cancel-for-real, same-session rework, `continue_task` and new-project creation (automated picker) is not covered. It must not be marked `ready` before that is complete. Platform coverage is summarised under "Platform coverage" at the end of this document.
 
 ## Discovery order
 
@@ -13,13 +15,13 @@ ZCode now has a dedicated `zcode-gui` adapter instead of a headless-CLI placehol
 5. PATH;
 6. `/Applications/ZCode.app` and `~/Applications/ZCode.app` on macOS.
 
-`D:\Z-Code\ZCode\ZCode.exe` is a Windows acceptance sample discovered from a configurable drive preference and relative template, not a business-code constant. Run `node scripts/probe-zcode.mjs all` for read-only installation, version, process, and CDP diagnostics.
+On Windows the install location is **discovered dynamically** from rules such as "fixed drives first plus a relative-path template", so no drive letter or version number is hardcoded; `preferredDrives` / `relativePaths` in step 2 above are the configuration entry points for that mechanism. Run `node scripts/probe-zcode.mjs all` for read-only installation, version, process and CDP diagnostics.
 
-## Diagnostics and hardware smoke test
+## Diagnostics and smoke test
 
 `probe-zcode.mjs` supports `install`, `process`, `cdp`, `selectors`, `ui`, `projects`, `models`, `permission`, `liveness`, and `session`. The model and permission commands briefly open their menus, read stable display names and internal IDs, then close them. The probe sends no messages and changes no account, credential, or security settings.
 
-After explicitly agreeing to transmit the test prompt to ZCode, maintainers can run the hardware smoke script:
+After **explicitly agreeing to transmit the test prompt to ZCode**, maintainers can run the explicit smoke script (it really sends a message):
 
 ```powershell
 npm run build
@@ -68,7 +70,7 @@ When import is required, the adapter snapshots existing dialogs before clicking 
 
 ## Project-less dispatch (`default` workspace)
 
-`projectPath` may be omitted (issue #12). When omitted, the task runs in ZCode's `default` workspace: no directory assigned, no project registered or imported, no Git baseline, no project snapshot freeze, no project lock, and no project acceptance.
+`projectPath` may be omitted. When omitted, the task runs in ZCode's `default` workspace: no directory assigned, no project registered or imported, no Git baseline, no project snapshot freeze, no project lock, and no project acceptance.
 
 ```text
 run_task(
@@ -104,27 +106,28 @@ Each poll samples the Stop button, loading card, active tool, last assistant has
 
 After completion, the shared acceptance engine runs. A failed round writes one plan to `<AGENT_FOREMAN_HOME>/tasks/<taskId>/rework-<taskId>-r<round>.md`; no temporary project copy is created. The repair prompt carries absolute plan and report paths and resumes the same session. Exhausted rounds end in `needs_attention`.
 
-## Hardware evidence (2026-09-11)
+## Platform coverage
 
 | Platform | Verified | Pending |
 |---|---|---|
-| macOS | Cross-platform implementation and CI/mock coverage | Real installation, Accessibility, and full end-to-end evidence |
+| Windows | Installation discovery, CDP launch and reuse, project binding and read-back, model and full-access read-back, dispatch → `stop_button` run evidence → `reply_stable`, real file development with a passing acceptance, `succeeded` | Cancel-for-real, same-session rework, `continue_task`, new-project creation (automated picker) |
+| macOS | Installation discovery (app bundle path), CDP launch and reuse (process-title rewrite handling plus port-range rescan), all idle selectors hit, existing-project binding read-back, model and permission read-back, dispatch → run evidence → `reply_stable`, real file development with a passing acceptance, manual drive of the "open folder" picker end to end (window shape plus AX direct path write → confirm → bind success) | Cancel-for-real, same-session rework, `continue_task`, new-project creation (automated picker) end to end |
 
-The Windows loop is complete. The built-in profile must remain `research` until the macOS hardware evidence is complete.
+**The built-in profile stays `research` until the cancel/rework/new-project matrix is complete on both platforms.**
 
-## Project and model readback (issues #8/#10)
+## Project and model readback
 
 Project triggers resolve by profile override, stable testid, then exact localized labels. Multiple visible matches in a tier stop resolution; fallback results are not merged. Add, move and detach actions are excluded. Binding paths come from the composer or its uniquely associated project row, not arbitrary sidebar paths. A matching name never overrides a conflicting path.
 
 Model readback decodes data-model-current-value and checks the visible model label, excluding hidden stale values and accessibility hints. Without a current attribute it uses a visible label/title, then legacy markup. Conflicting evidence, ambiguous labels or malformed encoding produce model_mismatch before submission.
 
-## Environment confirmation without a session anchor (#9)
+## Environment confirmation without a session anchor
 
 After closing an old instance, signing in or granting permissions, an unsent task takes a pre-send session baseline and sends its complete task, context and validated references. Confirmation text is never sent to the model. Existing-session answers and rework still select and verify the original session.
 
 Submission and identity share one observation window of at most 60 seconds, bounded by remaining task time. Prefer the task marker, then the unique new-session delta for initial dispatch. Multiple new sessions never justify guessing the active pane. Unresolved evidence preserves the scene and reports send_unknown or session_lost without automatic resubmission.
 
-## Staged automatic recovery (#10)
+## Staged automatic recovery
 
 Initialization tracks connection preparation, dialog baseline, folder opening, path submission and binding confirmation. The default budget is two minutes, bounded by remaining task time. Tasks remain running with progress updates and do not consume code-repair rounds. See [agent profiles](agent-profiles.en.md#zcode-automatic-initialization-recovery).
 

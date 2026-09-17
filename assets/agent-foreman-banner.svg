@@ -1,98 +1,112 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-label="agent-foreman-mcp banner">
   <title>agent-foreman-mcp</title>
-  <desc>agent-foreman-mcp —— 面向任意 MCP 宿主的 AI-Agent 编排 MCP server：驱动外部 AI-Agent 完成 项目开发 → 验收 → 失败返修 → 再验收 闭环。</desc>
+  <desc>agent-foreman-mcp —— 面向任意 MCP 宿主的 AI-Agent 编排 MCP server：派活、验收、失败返修、再验收。</desc>
   <defs>
-    <linearGradient id="bnBg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#141a33"/>
-      <stop offset="50%" stop-color="#0e1329"/>
-      <stop offset="100%" stop-color="#080b16"/>
+    <linearGradient id="af2Compose" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2b1040"/>
+      <stop offset="55%" stop-color="#1b0929"/>
+      <stop offset="100%" stop-color="#0d0416"/>
     </linearGradient>
-    <linearGradient id="bnStar" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ffe9a8"/>
-      <stop offset="100%" stop-color="#f5b942"/>
+    <linearGradient id="af2Warm" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffb270"/>
+      <stop offset="100%" stop-color="#ff5f8d"/>
     </linearGradient>
-    <linearGradient id="bnEdge" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#5eead4"/>
-      <stop offset="100%" stop-color="#38bdf8"/>
+    <linearGradient id="af2Mint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8ef7c8"/>
+      <stop offset="100%" stop-color="#2fd39b"/>
     </linearGradient>
-    <linearGradient id="bnText" x1="0" y1="0" x2="1" y2="0">
+    <linearGradient id="af2Word" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#d8bdf5"/>
     </linearGradient>
-    <radialGradient id="bnGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.42"/>
-      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    <linearGradient id="af2Row" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f7f1ff"/>
+      <stop offset="100%" stop-color="#c9b6f0"/>
+    </linearGradient>
+    <radialGradient id="af2GlowA" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ff5f8d" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#ff5f8d" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="bnGlow2" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#5eead4" stop-opacity="0.22"/>
-      <stop offset="100%" stop-color="#5eead4" stop-opacity="0"/>
+    <radialGradient id="af2GlowB" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2fd39b" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#2fd39b" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
-  <!-- 背景与边框 -->
-  <rect x="0" y="0" width="1280" height="320" fill="url(#bnBg)"/>
-  <rect x="1.5" y="1.5" width="1277" height="317" rx="26" fill="none" stroke="#2b3a63" stroke-width="3"/>
+  <!-- 底色与边框 -->
+  <rect x="0" y="0" width="1280" height="320" fill="url(#af2Compose)"/>
+  <rect x="2" y="2" width="1276" height="316" rx="26" fill="none" stroke="#54297a" stroke-width="3"/>
 
-  <!-- 氛围光 -->
-  <circle cx="200" cy="160" r="210" fill="url(#bnGlow)"/>
-  <circle cx="1080" cy="60" r="170" fill="url(#bnGlow2)"/>
+  <!-- 氛围光与斜向光带（非对称构图） -->
+  <circle cx="150" cy="270" r="200" fill="url(#af2GlowA)"/>
+  <circle cx="1150" cy="70" r="180" fill="url(#af2GlowB)"/>
+  <path d="M0 320 L420 0 L520 0 L100 320 Z" fill="#ffffff" opacity="0.022"/>
 
-  <!-- 左侧：图标标记（与 agent-foreman-icon.svg 同源缩略） -->
-  <g transform="translate(72 60)">
-    <rect x="0" y="0" width="200" height="200" rx="44" fill="#0b0f1f" stroke="#2b3a63" stroke-width="3"/>
-    <circle cx="100" cy="100" r="70" fill="url(#bnGlow)"/>
-    <!-- 连线 -->
-    <g stroke="url(#bnEdge)" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.92">
-      <path d="M100 100 L100 36"/>
-      <path d="M100 100 L154 136"/>
-      <path d="M100 100 L46 136"/>
-    </g>
-    <!-- agent 节点 -->
-    <g fill="#0f172e" stroke="url(#bnEdge)" stroke-width="3">
-      <circle cx="100" cy="36" r="15"/>
-      <circle cx="154" cy="136" r="15"/>
-      <circle cx="46" cy="136" r="15"/>
-    </g>
-    <g fill="#7dd3fc">
-      <circle cx="100" cy="36" r="4.5"/>
-      <circle cx="154" cy="136" r="4.5"/>
-      <circle cx="46" cy="136" r="4.5"/>
-    </g>
-    <!-- 编排中枢 -->
-    <g transform="translate(100 100)">
-      <path d="M0 -32 L7 -7 L32 0 L7 7 L0 32 L-7 7 L-32 0 L-7 -7 Z" fill="url(#bnStar)"/>
-      <circle cx="0" cy="0" r="10" fill="#fff7db"/>
-      <circle cx="0" cy="0" r="10" fill="none" stroke="#f5b942" stroke-width="2"/>
-    </g>
+  <!-- 左侧：闭环流水线卡片 -->
+  <rect x="56" y="44" width="386" height="232" rx="24" fill="#ffffff" opacity="0.05"/>
+  <rect x="56" y="44" width="386" height="232" rx="24" fill="none" stroke="#54297a" stroke-width="2"/>
+
+  <!-- 主轨 -->
+  <path d="M104 84 L104 231" stroke="#54297a" stroke-width="3"/>
+  <!-- 返修回环（第 3 步回到第 2 步）：走左侧留白，避免压住步骤文字 -->
+  <path d="M88 182 C62 182 62 133 88 133" fill="none" stroke="#ffc857" stroke-width="2.5" stroke-dasharray="6 7" opacity="0.85"/>
+
+  <!-- 步骤 1：派活 -->
+  <g>
+    <circle cx="104" cy="84" r="16" fill="#2a1240" stroke="url(#af2Warm)" stroke-width="3"/>
+    <text x="104" y="91" text-anchor="middle" font-size="19" font-weight="700" fill="#ffb270">1</text>
+    <text x="140" y="91" font-size="22" fill="#e9def7">派活</text>
+  </g>
+  <!-- 步骤 2：验收 -->
+  <g>
+    <circle cx="104" cy="133" r="16" fill="#2a1240" stroke="url(#af2Warm)" stroke-width="3"/>
+    <text x="104" y="140" text-anchor="middle" font-size="19" font-weight="700" fill="#ffb270">2</text>
+    <text x="140" y="140" font-size="22" fill="#e9def7">验收</text>
+  </g>
+  <!-- 步骤 3：失败返修 -->
+  <g>
+    <circle cx="104" cy="182" r="16" fill="#2a1240" stroke="#ffc857" stroke-width="3" stroke-dasharray="5 5"/>
+    <text x="104" y="189" text-anchor="middle" font-size="19" font-weight="700" fill="#ffc857">3</text>
+    <text x="140" y="189" font-size="22" fill="#e9def7">失败返修</text>
+  </g>
+  <!-- 步骤 4：再验收（通过） -->
+  <g>
+    <circle cx="104" cy="231" r="16" fill="url(#af2Mint)"/>
+    <path d="M97 231 L102 236 L112 225" fill="none" stroke="#0e2a20" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="140" y="238" font-size="22" fill="#e9def7">再验收</text>
   </g>
 
-  <!-- 右侧：字标 + 定位语 -->
+  <!-- 分隔线 -->
+  <path d="M478 62 L478 258" stroke="#54297a" stroke-width="2" opacity="0.6"/>
+
+  <!-- 右侧：字标与定位语 -->
   <g font-family="'Segoe UI','Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif">
-    <text x="316" y="128" font-size="62" font-weight="700" fill="url(#bnText)" letter-spacing="1.2">agent-foreman-mcp</text>
-    <text x="318" y="176" font-size="26" font-weight="500" fill="#9fb3d9" letter-spacing="0.6">AI-Agent orchestration MCP server for any MCP host</text>
-    <text x="318" y="216" font-size="22" fill="#7c8db3">通用 AI-Agent 编排 MCP server · Codex / TraeWork / ZCode</text>
+    <text x="520" y="150" font-size="52" font-weight="700" fill="url(#af2Word)" letter-spacing="0.5">agent-foreman-mcp</text>
+    <text x="522" y="190" font-size="22" fill="#b9a6d9">AI-Agent orchestration MCP server for any MCP host</text>
+    <text x="522" y="222" font-size="21" fill="#8d7aab">通用 AI-Agent 编排 MCP server</text>
   </g>
 
-  <!-- 底部流程带 -->
-  <g font-family="'Segoe UI',Arial,'PingFang SC','Microsoft YaHei',sans-serif" font-size="19" fill="#cfe3ff">
-    <g transform="translate(316 246)">
-      <rect x="0" y="0" width="196" height="38" rx="19" fill="#12203c" stroke="#2b3a63" stroke-width="2"/>
-      <text x="98" y="25" text-anchor="middle">项目开发</text>
+  <!-- 右侧：被驱动的外部 agent 胶囊 -->
+  <g font-family="'Segoe UI',Arial,'PingFang SC','Microsoft YaHei',sans-serif" font-size="18" fill="#dcccf5">
+    <rect x="520" y="248" width="150" height="34" rx="17" fill="#2a1240" stroke="#54297a" stroke-width="2"/>
+    <text x="595" y="271" text-anchor="middle">Codex 桌面端</text>
+    <rect x="684" y="248" width="166" height="34" rx="17" fill="#2a1240" stroke="#54297a" stroke-width="2"/>
+    <text x="767" y="271" text-anchor="middle">TraeWork GUI</text>
+    <rect x="864" y="248" width="140" height="34" rx="17" fill="#2a1240" stroke="#54297a" stroke-width="2"/>
+    <text x="934" y="271" text-anchor="middle">ZCode GUI</text>
+  </g>
+
+  <!-- 右侧：应用标记缩略 -->
+  <g>
+    <rect x="1096" y="70" width="116" height="116" rx="27" fill="#2a1240" stroke="#54297a" stroke-width="3"/>
+    <g fill="url(#af2Row)">
+      <rect x="1108" y="88" width="56" height="11" rx="5.5" opacity="0.95"/>
+      <rect x="1108" y="108" width="64" height="11" rx="5.5" opacity="0.62"/>
+      <rect x="1108" y="128" width="38" height="11" rx="5.5" opacity="0.36"/>
     </g>
-    <text x="524" y="271" font-size="22" fill="#5eead4">→</text>
-    <g transform="translate(548 246)">
-      <rect x="0" y="0" width="150" height="38" rx="19" fill="#12203c" stroke="#2b3a63" stroke-width="2"/>
-      <text x="75" y="25" text-anchor="middle">验收</text>
-    </g>
-    <text x="710" y="271" font-size="22" fill="#5eead4">→</text>
-    <g transform="translate(734 246)">
-      <rect x="0" y="0" width="196" height="38" rx="19" fill="#12203c" stroke="#2b3a63" stroke-width="2"/>
-      <text x="98" y="25" text-anchor="middle">失败返修</text>
-    </g>
-    <text x="942" y="271" font-size="22" fill="#5eead4">→</text>
-    <g transform="translate(966 246)">
-      <rect x="0" y="0" width="196" height="38" rx="19" fill="#12203c" stroke="#2b3a63" stroke-width="2"/>
-      <text x="98" y="25" text-anchor="middle">再验收</text>
+    <g transform="translate(1176 150)">
+      <circle cx="0" cy="0" r="20" fill="url(#af2Mint)"/>
+      <path d="M-8.5 0 L-2.5 6.5 L9 -6" fill="none" stroke="#0e2a20" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
   </g>
 </svg>

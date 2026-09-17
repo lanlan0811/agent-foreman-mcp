@@ -1,4 +1,4 @@
-# Visual acceptance (in development, targeting v0.5.0)
+# Visual acceptance (visual-acceptance.en.md)
 
 [中文](visual-acceptance.md)
 
@@ -16,7 +16,13 @@ agent-foreman-mcp visual init /path/to/project
 
 Pinned dependencies: puppeteer-core 24.43.1, @puppeteer/browsers 2.13.2, sharp 0.34.5, pixelmatch 7.2.0. The installer reads Puppeteer's browser revision mapping. Browsers live under the MCP data directory's `browsers` folder. Restore missing optional image dependencies with `npm install --include=optional`; their absence does not prevent existing MCP features from starting.
 
-Minimum browser launch and screenshot verified locally on Windows 10 Pro 10.0.19045 x64, Node 24.18.0, Chrome 148.0.7778.97, on 2026-09-14. Actual visual evidence for macOS 13+ Intel/Apple Silicon and other Node versions is pending. This is not a completed compatibility claim. See [validation progress](visual-validation.en.md).
+**Platform verification uses the CI matrix as its source of truth**: real-browser and image acceptance run in CI's `visual-browser` job across the full ubuntu / windows / macos-15-intel / macos-15 × Node 20/22/24 matrix (including managed browser installation and production-tarball consumer acceptance). Reproduce locally:
+
+```sh
+AGENT_FOREMAN_VISUAL_BROWSER_TEST=1 npx vitest run visual --maxWorkers=1
+```
+
+Without that switch the related tests are skipped by default. Per-platform notes and known limitations: [visual validation status](visual-validation.en.md).
 
 ## Configuration
 
