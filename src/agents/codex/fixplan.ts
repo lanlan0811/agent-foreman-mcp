@@ -51,7 +51,7 @@ export function renderCodexFixPlan(input: CodexFixPlanInput): string {
     `- 任务 ID：\`${input.taskId}\``,
     `- 项目：\`${input.displayPath}\``,
     `- 生成时间：${report.finishedAt}`,
-    `- 生成方：tianshu-mcp（自动生成，供 Codex 按计划修复）`,
+    `- 生成方：agent-foreman-mcp（自动生成，供 Codex 按计划修复）`,
     `- 验收结论：**未通过**（${failed.length} 项失败 / ${passed.length} 项通过 / ${skipped.length} 项跳过）`,
     "",
     "## 1. 原始任务目标",

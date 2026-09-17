@@ -36,7 +36,7 @@ afterAll(async () => {
 async function makeProject(): Promise<string> {
   const dir = await makeTmpRoot("traework-rework-proj");
   cleanup.push(dir);
-  fs.mkdirSync(path.join(dir, ".tianshu-mcp"), { recursive: true });
+  fs.mkdirSync(path.join(dir, ".agent-foreman"), { recursive: true });
   // 验收：done.txt 内容必须是 PASS，否则失败
   fs.writeFileSync(
     path.join(dir, "check.mjs"),
@@ -50,7 +50,7 @@ async function makeProject(): Promise<string> {
     "utf8",
   );
   fs.writeFileSync(
-    path.join(dir, ".tianshu-mcp", "acceptance.json"),
+    path.join(dir, ".agent-foreman", "acceptance.json"),
     JSON.stringify(
       { checks: [{ name: "done-marker", cmd: ["node", "check.mjs"], timeoutMs: 20000 }] },
       null,
@@ -219,7 +219,7 @@ describe("TraeWork 返修闭环（假 CDP + 真实编排层）", () => {
     const fileName = `rework-${meta.taskId}-r0.md`;
     const inTaskDir = path.join(h.store.dir(meta.taskId), fileName);
     expect(fs.existsSync(inTaskDir)).toBe(true);
-    expect(fs.existsSync(path.join(projectPath, ".tianshu-mcp", fileName))).toBe(false);
+    expect(fs.existsSync(path.join(projectPath, ".agent-foreman", fileName))).toBe(false);
     const planText = fs.readFileSync(inTaskDir, "utf8");
     expect(planText).toContain("修复计划");
     expect(planText).toContain("done-marker"); // 失败项被写入计划

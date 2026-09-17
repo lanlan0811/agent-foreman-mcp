@@ -1,6 +1,6 @@
 /**
- * formatter：统一结果文本 + ---tianshu-mcp-meta--- JSON 块拼装（开发计划 §5）。
- * meta 块固定以 ---tianshu-mcp-meta--- 起止行包裹，天枢可正则抽取。
+ * formatter：统一结果文本 + ---agent-foreman-meta--- JSON 块拼装（开发计划 §5）。
+ * meta 块固定以 ---agent-foreman-meta--- 起止行包裹，MCP 宿主可正则抽取。
  * ToolResult 使用 type alias（带隐式索引签名），以匹配官方 SDK 的 CallToolResult。
  */
 import type { TaskMeta } from "../tasks/task.js";
@@ -57,7 +57,7 @@ export function errorResult(msg: string): ToolResult {
 
 /** 摘要文本 + meta 块，返回 ToolResult */
 export function formatToolResult(text: string, meta: MetaBlockFields): ToolResult {
-  const block = `---tianshu-mcp-meta---\n${JSON.stringify(meta, null, 2)}\n---tianshu-mcp-meta---`;
+  const block = `---agent-foreman-meta---\n${JSON.stringify(meta, null, 2)}\n---agent-foreman-meta---`;
   return textResult(`${text}\n${block}`);
 }
 

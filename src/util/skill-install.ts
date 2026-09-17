@@ -1,6 +1,6 @@
 /**
  * 技能自检安装（开发计划 §17.5 / D19）：server 启动后幂等同步
- * 仓库 skills/tianshu-mcp/ → ~/.rivet/skills/tianshu-mcp/（os.homedir() 动态解析）。
+ * 仓库 skills/agent-foreman-mcp/ → ~/.rivet/skills/agent-foreman-mcp/（os.homedir() 动态解析）。
  * 目标已存在且内容 hash 一致 → skip；不一致 → 备份 .bak-<ts> 后覆盖。
  * 失败仅告警不阻断 server。
  */
@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { Logger } from "./log.js";
 import { mkdirp } from "./fs.js";
 
-export const SKILL_NAME = "tianshu-mcp";
+export const SKILL_NAME = "agent-foreman-mcp";
 
 /** 源目录定位：本地 dev 指向仓库 skills/；npm 包内通过 import.meta.url 定位 */
 export function resolveSkillSourceDir(): string {

@@ -246,9 +246,9 @@ describe("Codex 启动通道", () => {
   });
 
   it("macOS spawn 参数为 argv 形式：不加引号、含空格路径原样保留", () => {
-    const argv = buildSpawnArgs("/Users/a b/.tianshu-mcp/codex-gui/profile", 9333);
+    const argv = buildSpawnArgs("/Users/a b/.agent-foreman/codex-gui/profile", 9333);
     expect(argv).toEqual([
-      "--user-data-dir=/Users/a b/.tianshu-mcp/codex-gui/profile",
+      "--user-data-dir=/Users/a b/.agent-foreman/codex-gui/profile",
       "--remote-debugging-port=9333",
     ]);
   });
@@ -338,9 +338,9 @@ describe("Codex 启动通道", () => {
 
 describe("Codex 项目匹配", () => {
   it("按目录名 basename 匹配，Windows 大小写不敏感", () => {
-    const items = [{ name: "tianshu-mcp" }, { name: "ReproCore" }];
-    expect(matchCodexProject(items, "D:\\Trae项目\\tianshu-mcp", "win32").item?.name).toBe("tianshu-mcp");
-    expect(matchCodexProject(items, "D:\\Trae项目\\TIANSHU-MCP", "win32").item?.name).toBe("tianshu-mcp");
+    const items = [{ name: "agent-foreman-mcp" }, { name: "ReproCore" }];
+    expect(matchCodexProject(items, "D:\\Trae项目\\agent-foreman-mcp", "win32").item?.name).toBe("agent-foreman-mcp");
+    expect(matchCodexProject(items, "D:\\Trae项目\\AGENT-FOREMAN-MCP", "win32").item?.name).toBe("agent-foreman-mcp");
   });
 
   it("同名多命中 → 歧义，不猜", () => {
@@ -810,8 +810,8 @@ describe("Codex 注册表接入", () => {
     expect(codex.gui?.activation).toBe(darwin ? "spawn" : "msix-com");
     expect(codex.gui?.userDataDir).toBe(
       darwin
-        ? "{HOME}/.tianshu-mcp/codex-gui/profile"
-        : "{LOCALAPPDATA}/tianshu-mcp/codex-gui/profile",
+        ? "{HOME}/.agent-foreman/codex-gui/profile"
+        : "{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile",
     );
     expect(codex.gui?.permissionMode).toBe("完全访问");
     expect(codex.gui?.fixPlanDir).toBe(".zcode/plans");
@@ -921,7 +921,7 @@ describe("Codex 项目登记", () => {
     expect(isProjectRegistered(after, "D:\\切水果小游戏")).toBeTruthy();
     expect(after["project-order"][0]).toBe(r.projectId);
     expect(after["project-order"]).toContain("existing");
-    expect(fs.existsSync(`${stateFile}.tianshu-mcp-backup.json`)).toBe(true);
+    expect(fs.existsSync(`${stateFile}.agent-foreman-backup.json`)).toBe(true);
     await rmrf(root);
   });
 

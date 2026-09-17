@@ -109,21 +109,21 @@ describe("content command contract", () => {
 
   describe("resolveContentEnv", () => {
     it("maps declared child names to host values", () => {
-      process.env.__TIANSHU_CONTENT_TEST_VALUE = "token-value";
+      process.env.__AGENT_FOREMAN_CONTENT_TEST_VALUE = "token-value";
       try {
         expect(
-          resolveContentEnv({ VISION_API_KEY: "__TIANSHU_CONTENT_TEST_VALUE" }),
+          resolveContentEnv({ VISION_API_KEY: "__AGENT_FOREMAN_CONTENT_TEST_VALUE" }),
         ).toEqual({ VISION_API_KEY: "token-value" });
       } finally {
-        delete process.env.__TIANSHU_CONTENT_TEST_VALUE;
+        delete process.env.__AGENT_FOREMAN_CONTENT_TEST_VALUE;
       }
     });
     it("throws CONTENT_ENV_MISSING when the host variable is absent", () => {
-      expect(() => resolveContentEnv({ VISION_API_KEY: "__TIANSHU_CONTENT_ABSENT" })).toThrow(
+      expect(() => resolveContentEnv({ VISION_API_KEY: "__AGENT_FOREMAN_CONTENT_ABSENT" })).toThrow(
         VisualError,
       );
       try {
-        resolveContentEnv({ VISION_API_KEY: "__TIANSHU_CONTENT_ABSENT" });
+        resolveContentEnv({ VISION_API_KEY: "__AGENT_FOREMAN_CONTENT_ABSENT" });
       } catch (e) {
         expect((e as VisualError).code).toBe("CONTENT_ENV_MISSING");
       }

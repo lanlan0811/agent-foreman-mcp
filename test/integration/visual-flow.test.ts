@@ -8,7 +8,7 @@ import { TaskStore } from "../../src/tasks/task-store.js";
 import { Logger } from "../../src/util/log.js";
 import { resolveDataHome } from "../../src/config/store.js";
 
-it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
+it.skipIf(process.env.AGENT_FOREMAN_VISUAL_BROWSER_TEST !== "1")(
   "requires explicit approval then detects page defects and protects frozen rules",
   async () => {
     const project = await fs.mkdtemp(path.join(os.tmpdir(), "视觉 测试-"));
@@ -19,7 +19,7 @@ it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
     const engine = new AcceptanceEngine(store, logger);
     let candidateId: string | undefined;
     try {
-      await fs.mkdir(path.join(project, ".tianshu-mcp"));
+      await fs.mkdir(path.join(project, ".agent-foreman"));
       const config = {
         checks: [],
         requireChanges: false,
@@ -37,7 +37,7 @@ it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
         },
       };
       await fs.writeFile(
-        path.join(project, ".tianshu-mcp", "acceptance.json"),
+        path.join(project, ".agent-foreman", "acceptance.json"),
         JSON.stringify(config),
       );
       await fs.writeFile(
@@ -75,7 +75,7 @@ it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
       expect(await fs.readFile(failed.report.files.html!, "utf8")).toContain("Actual opacity");
       config.visual.enabled = false;
       await fs.writeFile(
-        path.join(project, ".tianshu-mcp", "acceptance.json"),
+        path.join(project, ".agent-foreman", "acceptance.json"),
         JSON.stringify(config),
       );
       const tampered = await engine.runVerify(newReq);
@@ -95,7 +95,7 @@ it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
   120_000,
 );
 
-it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
+it.skipIf(process.env.AGENT_FOREMAN_VISUAL_BROWSER_TEST !== "1")(
   "semantic-only pages need no baseline and yield a content result (D9)",
   async () => {
     const project = await fs.mkdtemp(path.join(os.tmpdir(), "视觉 语义-"));
@@ -104,13 +104,13 @@ it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
     const logger = new Logger(null, "error");
     const store = new TaskStore(home, logger);
     const engine = new AcceptanceEngine(store, logger);
-    const counter = path.join(project, ".tianshu-mcp", "judge-counter.txt");
+    const counter = path.join(project, ".agent-foreman", "judge-counter.txt");
     try {
-      await fs.mkdir(path.join(project, ".tianshu-mcp"));
+      await fs.mkdir(path.join(project, ".agent-foreman"));
       process.env.CONTENT_JUDGE_MODE = "pass";
       process.env.CONTENT_JUDGE_COUNTER = counter;
       await fs.writeFile(
-        path.join(project, ".tianshu-mcp", "acceptance.json"),
+        path.join(project, ".agent-foreman", "acceptance.json"),
         JSON.stringify({
           checks: [],
           requireChanges: false,
@@ -178,7 +178,7 @@ it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
   120_000,
 );
 
-it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
+it.skipIf(process.env.AGENT_FOREMAN_VISUAL_BROWSER_TEST !== "1")(
   "pixel pages with content produce both items from one screenshot and keep the baseline flow",
   async () => {
     const project = await fs.mkdtemp(path.join(os.tmpdir(), "视觉 像素内容-"));
@@ -187,10 +187,10 @@ it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
     const logger = new Logger(null, "error");
     const store = new TaskStore(home, logger);
     const engine = new AcceptanceEngine(store, logger);
-    const counter = path.join(project, ".tianshu-mcp", "judge-counter.txt");
+    const counter = path.join(project, ".agent-foreman", "judge-counter.txt");
     let candidateId: string | undefined;
     try {
-      await fs.mkdir(path.join(project, ".tianshu-mcp"));
+      await fs.mkdir(path.join(project, ".agent-foreman"));
       process.env.CONTENT_JUDGE_MODE = "pass";
       process.env.CONTENT_JUDGE_COUNTER = counter;
       const config = {
@@ -224,7 +224,7 @@ it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
         },
       };
       await fs.writeFile(
-        path.join(project, ".tianshu-mcp", "acceptance.json"),
+        path.join(project, ".agent-foreman", "acceptance.json"),
         JSON.stringify(config),
       );
       await fs.writeFile(

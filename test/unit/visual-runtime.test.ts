@@ -27,9 +27,9 @@ async function doctorFixture(
 ): Promise<{ project: string; home: string }> {
   const project = await fs.mkdtemp(path.join(os.tmpdir(), "visual-doctor-proj-"));
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "visual-doctor-home-"));
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify({
       visual: { enabled: visualEnabled, content, contents: rules },
     }),

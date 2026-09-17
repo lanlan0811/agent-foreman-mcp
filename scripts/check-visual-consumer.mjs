@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 
 const index = process.argv.indexOf("--package-dir");
 if (index < 0 || !process.argv[index + 1])
-  throw new Error("Usage: node check-visual-consumer.mjs --package-dir <installed tianshu-mcp>");
+  throw new Error("Usage: node check-visual-consumer.mjs --package-dir <installed agent-foreman-mcp>");
 const packageDirectory = await fs.realpath(process.argv[index + 1]);
 const moduleFromPackage = (name) =>
   import(pathToFileURL(path.join(packageDirectory, "dist", name)).href);
@@ -18,7 +18,7 @@ const { resolveDataHome } = await moduleFromPackage("config/store.js");
 const { prepareBaseline, approveBaseline } = await moduleFromPackage("visual/baselines.js");
 const { loadSharp } = await moduleFromPackage("visual/runtime.js");
 const { loadBrowserTools, resolveBrowser } = await moduleFromPackage("visual/runtime.js");
-const project = await fs.mkdtemp(path.join(os.tmpdir(), "tianshu-consumer-visual-"));
+const project = await fs.mkdtemp(path.join(os.tmpdir(), "agent-foreman-consumer-visual-"));
 const home = resolveDataHome();
 const taskId = `tsk_consumer_${randomUUID()}`;
 const logger = new Logger(null, "error"),
@@ -26,7 +26,7 @@ const logger = new Logger(null, "error"),
   engine = new AcceptanceEngine(store, logger);
 let candidateId;
 try {
-  await fs.mkdir(path.join(project, ".tianshu-mcp"));
+  await fs.mkdir(path.join(project, ".agent-foreman"));
   await fs.writeFile(
     path.join(project, "index.html"),
     '<main style="width:100px;height:50px;background:red">Consumer</main>',
@@ -36,7 +36,7 @@ try {
     .png()
     .toFile(path.join(project, "image.png"));
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify({
       checks: [],
       requireChanges: false,
@@ -115,12 +115,12 @@ try {
       "blue"
     )
       throw new Error("Report region selection failed");
-    if (process.env.TIANSHU_VISUAL_REPORT_EVIDENCE) {
-      await fs.mkdir(path.dirname(path.resolve(process.env.TIANSHU_VISUAL_REPORT_EVIDENCE)), {
+    if (process.env.AGENT_FOREMAN_VISUAL_REPORT_EVIDENCE) {
+      await fs.mkdir(path.dirname(path.resolve(process.env.AGENT_FOREMAN_VISUAL_REPORT_EVIDENCE)), {
         recursive: true,
       });
       await page.screenshot({
-        path: path.resolve(process.env.TIANSHU_VISUAL_REPORT_EVIDENCE),
+        path: path.resolve(process.env.AGENT_FOREMAN_VISUAL_REPORT_EVIDENCE),
         fullPage: true,
       });
     }

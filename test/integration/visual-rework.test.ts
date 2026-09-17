@@ -59,7 +59,7 @@ async function harness(blocked: boolean) {
   const project = await makeTmpRoot("visual-rework-project"),
     home = await makeTmpRoot("visual-rework-home");
   cleanup.push(project, home);
-  await fs.mkdir(path.join(project, ".tianshu-mcp"));
+  await fs.mkdir(path.join(project, ".agent-foreman"));
   const config = {
     checks: [],
     requireChanges: false,
@@ -69,7 +69,7 @@ async function harness(blocked: boolean) {
       images: [{ id: "cover", files: ["image.png"], width: { exact: blocked ? 2 : 4 } }],
     },
   };
-  await fs.writeFile(path.join(project, ".tianshu-mcp", "acceptance.json"), JSON.stringify(config));
+  await fs.writeFile(path.join(project, ".agent-foreman", "acceptance.json"), JSON.stringify(config));
   const data = new DataHome(home, logger, {
     zcode: AgentProfileSchema.parse({
       displayName: "Visual test",
@@ -148,7 +148,7 @@ it("resolves a blocker by approved rule review and re-verifies without another a
   expect(h.adapter.calls).toHaveLength(1);
   h.config.visual.limits.decodedPixels = 100;
   await fs.writeFile(
-    path.join(h.project, ".tianshu-mcp", "acceptance.json"),
+    path.join(h.project, ".agent-foreman", "acceptance.json"),
     JSON.stringify(h.config),
   );
   const review = await reviewRules(h.home, meta.taskId);

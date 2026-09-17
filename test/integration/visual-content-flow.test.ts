@@ -34,12 +34,12 @@ async function scenario(options: {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "视觉 内容-home-"));
   dirs.push(project, home);
   await fs.mkdir(path.join(project, "assets"), { recursive: true });
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   const sharp = await loadSharp();
   await sharp({ create: { width: 4, height: 4, channels: 3, background: "#3355aa" } })
     .png()
     .toFile(path.join(project, "assets", "logo.png"));
-  const counter = path.join(project, ".tianshu-mcp", "judge-counter.txt");
+  const counter = path.join(project, ".agent-foreman", "judge-counter.txt");
   const config = {
     checks: [],
     requireChanges: false,
@@ -54,12 +54,12 @@ async function scenario(options: {
         ...(options.minConfidence !== undefined ? { minConfidence: options.minConfidence } : {}),
       },
       contents: [
-        { id: "logo", files: ["assets/logo.png"], expect: "blue gear with TIANSHU text", blocking },
+        { id: "logo", files: ["assets/logo.png"], expect: "blue gear with AGENT_FOREMAN text", blocking },
       ],
     },
   };
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify(config),
   );
   savedEnv.CONTENT_JUDGE_MODE = process.env.CONTENT_JUDGE_MODE;
@@ -117,19 +117,19 @@ it("warning content checks pass the round and land in reports with stable codes"
   expect(result.code).toBe("CONTENT_MATCH");
   expect(result.status).toBe("passed");
   expect(result.optional).toBe(true);
-  expect(result.message).toContain("blue gear with TIANSHU text");
+  expect(result.message).toContain("blue gear with AGENT_FOREMAN text");
   expect(result.content?.cached).toBe(false);
   expect(result.content?.provider).toBe(process.execPath);
   expect(await counterLines()).toBe(2);
   const md = await fs.readFile(report.files.md, "utf8");
   expect(md).toContain("CONTENT_MATCH");
-  expect(md).toContain("期望描述：blue gear with TIANSHU text");
+  expect(md).toContain("期望描述：blue gear with AGENT_FOREMAN text");
   expect(md).toContain("内容校验项默认为告警");
   const json = JSON.parse(await fs.readFile(report.files.json, "utf8"));
   expect(json.visual.results[0].code).toBe("CONTENT_MATCH");
   const html = await fs.readFile(report.files.html!, "utf8");
   expect(html).toContain("<th>Sample</th>");
-  expect(html).toContain("blue gear with TIANSHU text");
+  expect(html).toContain("blue gear with AGENT_FOREMAN text");
   // 证据图落任务目录（离线自包含）
   expect(result.artifacts?.source).toBeTruthy();
   await expect(fs.access(result.artifacts!.source!)).resolves.toBeUndefined();

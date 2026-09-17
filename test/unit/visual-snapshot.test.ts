@@ -17,9 +17,9 @@ afterEach(async () => {
 async function projectWith(pages: unknown[]): Promise<string> {
   const project = await fs.mkdtemp(path.join(os.tmpdir(), "visual-snapshot-"));
   dirs.push(project);
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify({
       visual: {
         enabled: true,

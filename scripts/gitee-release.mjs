@@ -16,7 +16,7 @@
  * 环境变量：
  *   GITEE_TOKEN   必填（也可用 GITEE_ACCESS_TOKEN；两者都无则跳过并以 0 退出）
  *   GITEE_OWNER   可选，默认 Lan0811
- *   GITEE_REPO    可选，默认 tianshu-mcp
+ *   GITEE_REPO    可选，默认 agent-foreman-mcp
  *   GITEE_BRANCH  可选，默认 master（创建发行版时的目标分支）
  *
  * 令牌获取：Gitee → 设置 → 私人令牌 → 生成新令牌（至少勾选 projects 权限）。
@@ -25,7 +25,7 @@ import { composeReleaseBody, repoRoot } from "./release-body.mjs";
 
 const token = (process.env.GITEE_TOKEN || process.env.GITEE_ACCESS_TOKEN || "").trim();
 const owner = (process.env.GITEE_OWNER || "Lan0811").trim();
-const repo = (process.env.GITEE_REPO || "tianshu-mcp").trim();
+const repo = (process.env.GITEE_REPO || "agent-foreman-mcp").trim();
 const branch = (process.env.GITEE_BRANCH || "master").trim();
 void repoRoot;
 
@@ -51,7 +51,7 @@ try {
     version,
     host: "gitee",
     ownerRepo: `${owner}/${repo}`,
-    npmPackage: "tianshu-mcp",
+    npmPackage: "agent-foreman-mcp",
     previousVersion,
   });
 } catch (e) {
@@ -62,7 +62,7 @@ console.log(`发布正文已合成（${body.length} 字符，双语 + gitee 绝�
 
 const api = `https://gitee.com/api/v5/repos/${owner}/${repo}`;
 const q = new URLSearchParams({ access_token: token }).toString();
-const name = `tianshu-mcp ${tag}`;
+const name = `agent-foreman-mcp ${tag}`;
 
 async function getExisting() {
   const r = await fetch(`${api}/releases/tags/${tag}?${q}`);

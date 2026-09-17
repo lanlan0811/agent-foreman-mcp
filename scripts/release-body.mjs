@@ -8,7 +8,7 @@
  *
  * 用法（CLI）：
  *   node scripts/release-body.mjs <version> <github|gitee> [ownerRepo] [npmPackage] [ciRunId] [previousVersion]
- *   例：node scripts/release-body.mjs 0.3.0 github lanlan0811/tianshu-mcp tianshu-mcp 34661265199 0.2.0
+ *   例：node scripts/release-body.mjs 0.3.0 github lanlan0811/agent-foreman-mcp agent-foreman-mcp 34661265199 0.2.0
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -53,7 +53,7 @@ export function readReleaseDoc(version, lang) {
  * @typedef {Object} ComposeOptions
  * @property {string} version
  * @property {"github"|"gitee"} host
- * @property {string} ownerRepo   形如 lanlan0811/tianshu-mcp 或 Lan0811/tianshu-mcp
+ * @property {string} ownerRepo   形如 lanlan0811/agent-foreman-mcp 或 Lan0811/agent-foreman-mcp
  * @property {string} [npmPackage]
  * @property {string|number} [ciRunId]
  * @property {string} [previousVersion]  用于 Full Changelog 的上一版本 tag（不含 v）
@@ -68,7 +68,7 @@ export function composeReleaseBody(opts) {
   const version = String(opts.version).replace(/^v/, "");
   const tag = `v${version}`;
   const { host, ownerRepo } = opts;
-  const npmPackage = opts.npmPackage ?? "tianshu-mcp";
+  const npmPackage = opts.npmPackage ?? "agent-foreman-mcp";
 
   const zh = readReleaseDoc(version, "zh");
   const en = readReleaseDoc(version, "en");
@@ -124,14 +124,14 @@ if (invokedDirectly) {
     console.error("host 必须是 github 或 gitee");
     process.exit(2);
   }
-  const repo = ownerRepo || (host === "github" ? "lanlan0811/tianshu-mcp" : "Lan0811/tianshu-mcp");
+  const repo = ownerRepo || (host === "github" ? "lanlan0811/agent-foreman-mcp" : "Lan0811/agent-foreman-mcp");
   try {
     process.stdout.write(
       composeReleaseBody({
         version,
         host,
         ownerRepo: repo,
-        npmPackage: npmPackage || "tianshu-mcp",
+        npmPackage: npmPackage || "agent-foreman-mcp",
         ciRunId: ciRunId || undefined,
         previousVersion: previousVersion || undefined,
       }),

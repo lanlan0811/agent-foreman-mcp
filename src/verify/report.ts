@@ -77,7 +77,7 @@ export function reportToMd(report: VerifyReport): string {
   return L.join("\n");
 }
 
-/** 摘要：面向天枢的可读结论（≤ 约 6KB） */
+/** 摘要：面向 MCP 宿主的可读结论（≤ 约 6KB） */
 export function summarizeReport(report: VerifyReport): string {
   const passCount = report.checks.filter((c) => c.passed).length;
   const fail = report.checks.filter((c) => !c.passed && !c.skipped);

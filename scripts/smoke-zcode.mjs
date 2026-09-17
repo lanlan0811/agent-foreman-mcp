@@ -14,7 +14,7 @@ function readArg(name) {
 }
 
 function parseMeta(text) {
-  const match = text.match(/---tianshu-mcp-meta---\n([\s\S]*?)\n---tianshu-mcp-meta---/);
+  const match = text.match(/---agent-foreman-meta---\n([\s\S]*?)\n---agent-foreman-meta---/);
   return match ? JSON.parse(match[1]) : null;
 }
 
@@ -51,7 +51,7 @@ if (
 
 const home = path.join(
   os.tmpdir(),
-  `tianshu-zcode-smoke-${Date.now()}-${randomBytes(3).toString("hex")}`,
+  `agent-foreman-zcode-smoke-${Date.now()}-${randomBytes(3).toString("hex")}`,
 );
 await fsp.mkdir(home, { recursive: true });
 const logger = await Logger.create(path.join(home, "logs"), "info");

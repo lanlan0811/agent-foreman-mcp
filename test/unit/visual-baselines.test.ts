@@ -10,9 +10,9 @@ afterEach(async () => { for (const dir of dirs.splice(0)) await fs.rm(dir, { rec
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "visual-baselines-")); dirs.push(root);
   const project = path.join(root, "project"), home = path.join(root, "home");
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   const config = { visual: { enabled: true, viewports: [{ id: "test", width: 20, height: 20 }], pages: [{ id: "home", source: { type: "static", root: "." } }] } };
-  await fs.writeFile(path.join(project, ".tianshu-mcp", "acceptance.json"), JSON.stringify(config));
+  await fs.writeFile(path.join(project, ".agent-foreman", "acceptance.json"), JSON.stringify(config));
   const sharp = await loadSharp();
   await sharp({ create: { width: 20, height: 20, channels: 3, background: "red" } }).jpeg().toFile(path.join(project, "reference.jpg"));
   const candidate = await prepareBaseline(home, { projectPath: project, imports: [{ caseId: "home", viewportId: "test", file: "reference.jpg" }] });
@@ -41,7 +41,7 @@ it("rejects configuration changes and concurrent adoption", async () => {
   expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   await expect(approveBaseline(h.home, h.approval)).rejects.toMatchObject({ code: "BASELINE_CHANGED" });
   h.config.visual.viewports[0]!.width = 21;
-  await fs.writeFile(path.join(h.project, ".tianshu-mcp", "acceptance.json"), JSON.stringify(h.config));
+  await fs.writeFile(path.join(h.project, ".agent-foreman", "acceptance.json"), JSON.stringify(h.config));
   await expect(approveBaseline(h.home, h.approval)).rejects.toMatchObject({ code: "CONFIG_CHANGED" });
 });
 
@@ -50,7 +50,7 @@ async function semanticFixture(pagePixelFalse: boolean) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "visual-baselines-semantic-"));
   dirs.push(root);
   const project = path.join(root, "project"), home = path.join(root, "home");
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   const config = {
     visual: {
       enabled: true,
@@ -75,7 +75,7 @@ async function semanticFixture(pagePixelFalse: boolean) {
       ],
     },
   };
-  await fs.writeFile(path.join(project, ".tianshu-mcp", "acceptance.json"), JSON.stringify(config));
+  await fs.writeFile(path.join(project, ".agent-foreman", "acceptance.json"), JSON.stringify(config));
   const sharp = await loadSharp();
   await sharp({ create: { width: 20, height: 20, channels: 3, background: "red" } }).jpeg().toFile(path.join(project, "reference.jpg"));
   return { project, home };
@@ -96,9 +96,9 @@ it("refuses baseline preparation when every page is semantic-only", async () => 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "visual-baselines-nopixel-"));
   dirs.push(root);
   const project = path.join(root, "project"), home = path.join(root, "home");
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify({
       visual: {
         enabled: true,

@@ -23,7 +23,7 @@ export const AO_NONE = 0;
 export const ACTIVATION_CSHARP = String.raw`
 using System;
 using System.Runtime.InteropServices;
-public static class TianshuCodexAct {
+public static class AgentForemanCodexAct {
   [ComImport, Guid("2e941141-7f97-4756-ba1d-9decde894a3d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   interface IApplicationActivationManager {
     int ActivateApplication([In] string appUserModelId, [In] string arguments, [In] int options, [Out] out uint processId);
@@ -69,7 +69,7 @@ export function buildActivationScript(aumid: string, args: string): string {
 Add-Type -TypeDefinition @'
 ${ACTIVATION_CSHARP}
 '@
-$pidValue = [TianshuCodexAct]::Activate(${q(aumid)}, ${q(args)}, ${AO_NONE})
+$pidValue = [AgentForemanCodexAct]::Activate(${q(aumid)}, ${q(args)}, ${AO_NONE})
 Write-Output ("activated pid=" + $pidValue)`;
 }
 
@@ -93,7 +93,7 @@ export async function focusCodexApp(aumid: string, timeoutMs = 20_000): Promise<
 Add-Type -TypeDefinition @'
 ${ACTIVATION_CSHARP}
 '@
-[void][TianshuCodexAct]::Activate(${q(aumid)}, '', ${AO_NONE})
+[void][AgentForemanCodexAct]::Activate(${q(aumid)}, '', ${AO_NONE})
 Write-Output 'focus-ok'`;
   try {
     const { stdout } = await execFileAsync(

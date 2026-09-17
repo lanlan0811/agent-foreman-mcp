@@ -59,8 +59,8 @@ export const BUILTIN_PROFILES: Record<string, AgentProfile> = {
       activation: process.platform === "darwin" ? "spawn" : "msix-com",
       userDataDir:
         process.platform === "darwin"
-          ? "{HOME}/.tianshu-mcp/codex-gui/profile"
-          : "{LOCALAPPDATA}/tianshu-mcp/codex-gui/profile",
+          ? "{HOME}/.agent-foreman/codex-gui/profile"
+          : "{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile",
       appxPackageName: "OpenAI.Codex",
       permissionMode: "完全访问",
       defaultPermissionMode: "完全访问",

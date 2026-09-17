@@ -14,7 +14,7 @@ const dirs: string[] = [];
 async function fixture() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "visual-config-"));
   dirs.push(dir);
-  await fs.mkdir(path.join(dir, ".tianshu-mcp"));
+  await fs.mkdir(path.join(dir, ".agent-foreman"));
   return dir;
 }
 afterEach(async () => {
@@ -29,13 +29,13 @@ async function contentVerdict(mode: string, blocking: boolean): Promise<boolean>
   const project = await fs.mkdtemp(path.join(os.tmpdir(), "visual-verdict-"));
   dirs.push(project);
   await fs.mkdir(path.join(project, "assets"), { recursive: true });
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   const sharp = await loadSharp();
   await sharp({ create: { width: 4, height: 4, channels: 3, background: "#3355aa" } })
     .png()
     .toFile(path.join(project, "assets", "logo.png"));
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify({
       checks: [],
       requireChanges: false,
@@ -57,7 +57,7 @@ async function contentVerdict(mode: string, blocking: boolean): Promise<boolean>
   const savedMode = process.env.CONTENT_JUDGE_MODE;
   const savedCounter = process.env.CONTENT_JUDGE_COUNTER;
   process.env.CONTENT_JUDGE_MODE = mode;
-  process.env.CONTENT_JUDGE_COUNTER = path.join(project, ".tianshu-mcp", "counter.txt");
+  process.env.CONTENT_JUDGE_COUNTER = path.join(project, ".agent-foreman", "counter.txt");
   const logger = new Logger(null, "error");
   const store = new TaskStore(project, logger);
   const engine = new AcceptanceEngine(store, logger);
@@ -100,7 +100,7 @@ describe("visual configuration", () => {
   it("preserves omitted commands versus explicitly empty commands", async () => {
     const dir = await fixture();
     expect(await readAcceptanceConfig(dir)).toBeNull();
-    const file = path.join(dir, ".tianshu-mcp", "acceptance.json");
+    const file = path.join(dir, ".agent-foreman", "acceptance.json");
     await fs.writeFile(file, JSON.stringify({ visual: { enabled: false } }));
     expect((await readAcceptanceConfig(dir))?.checks).toBeUndefined();
     await fs.writeFile(file, JSON.stringify({ checks: [] }));
@@ -131,7 +131,7 @@ describe("visual configuration", () => {
   });
   it("blocks malformed config even when temporary checks replace commands", async () => {
     const dir = await fixture();
-    await fs.writeFile(path.join(dir, ".tianshu-mcp", "acceptance.json"), "{");
+    await fs.writeFile(path.join(dir, ".agent-foreman", "acceptance.json"), "{");
     const logger = new Logger(null, "error");
     const store = new TaskStore(dir, logger);
     const { report, passed } = await new AcceptanceEngine(store, logger).runVerify({

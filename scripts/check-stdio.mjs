@@ -140,7 +140,7 @@ function assert(cond, msg) {
 /* ---------------- 临时目录 ---------------- */
 
 async function mkIsolatedHome(tag) {
-  const home = await fsp.mkdtemp(path.join(os.tmpdir(), `tianshu-stdio-${tag}-`));
+  const home = await fsp.mkdtemp(path.join(os.tmpdir(), `agent-foreman-stdio-${tag}-`));
   return home;
 }
 
@@ -149,7 +149,7 @@ function childEnv(home) {
     ...process.env,
     HOME: home,
     USERPROFILE: home,
-    TIANSHU_MCP_HOME: home,
+    AGENT_FOREMAN_HOME: home,
   };
 }
 
@@ -354,7 +354,7 @@ async function handshake(client, opts) {
   const res = await promise;
   assert(!res.error, `initialize 返回错误：${JSON.stringify(res.error)}`);
   const r = res.result ?? {};
-  assert(r.serverInfo?.name === "tianshu-mcp", `serverInfo.name 应为 tianshu-mcp，实际 ${r.serverInfo?.name}`);
+  assert(r.serverInfo?.name === "agent-foreman-mcp", `serverInfo.name 应为 agent-foreman-mcp，实际 ${r.serverInfo?.name}`);
   if (opts.expectVersion) {
     assert(
       r.serverInfo?.version === opts.expectVersion,
@@ -381,7 +381,7 @@ async function listTools(client, opts) {
   return names;
 }
 
-/** 只读调用 + 返回格式校验（文本 + ---tianshu-mcp-meta--- JSON 块） */
+/** 只读调用 + 返回格式校验（文本 + ---agent-foreman-meta--- JSON 块） */
 async function readOnlyCall(client) {
   const { promise } = client.request("tools/call", { name: "list_tasks", arguments: {} });
   const res = await promise;
@@ -391,8 +391,8 @@ async function readOnlyCall(client) {
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")
     .join("\n");
-  assert(text.includes("---tianshu-mcp-meta---"), "tools/call 结果缺少 ---tianshu-mcp-meta--- JSON 块");
-  const m = text.match(/---tianshu-mcp-meta---\n([\s\S]*?)\n---tianshu-mcp-meta---/);
+  assert(text.includes("---agent-foreman-meta---"), "tools/call 结果缺少 ---agent-foreman-meta--- JSON 块");
+  const m = text.match(/---agent-foreman-meta---\n([\s\S]*?)\n---agent-foreman-meta---/);
   assert(m, "meta 块无法解析");
   const meta = JSON.parse(m[1]);
   assert(meta.ok === true, `list_tasks meta.ok 应为 true，实际 ${meta.ok}`);
@@ -408,11 +408,11 @@ function git(args, cwd) {
 }
 
 async function makeGitProject(opts, tag) {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), `tianshu-stdio-proj-${tag}-`));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), `agent-foreman-stdio-proj-${tag}-`));
   await fsp.cp(path.join(opts.fixtures, "fixture"), dir, { recursive: true });
-  await fsp.mkdir(path.join(dir, ".tianshu-mcp"), { recursive: true });
+  await fsp.mkdir(path.join(dir, ".agent-foreman"), { recursive: true });
   await fsp.writeFile(
-    path.join(dir, ".tianshu-mcp", "playbook.json"),
+    path.join(dir, ".agent-foreman", "playbook.json"),
     JSON.stringify({ playbook: "good", sleepMs: 200 }, null, 2),
     "utf8",
   );
@@ -462,7 +462,7 @@ async function runStubTask(client, opts, home) {
   const res = await promise;
   assert(!res.error, `run_task 返回错误：${JSON.stringify(res.error)}`);
   const text = (res.result?.content ?? []).map((c) => c.text ?? "").join("\n");
-  const m = text.match(/---tianshu-mcp-meta---\n([\s\S]*?)\n---tianshu-mcp-meta---/);
+  const m = text.match(/---agent-foreman-meta---\n([\s\S]*?)\n---agent-foreman-meta---/);
   assert(m, `run_task 结果缺少 meta 块：${truncate(text)}`);
   const taskId = JSON.parse(m[1]).taskId;
   assert(typeof taskId === "string" && taskId.startsWith("tsk_"), `run_task 未返回 taskId：${truncate(text)}`);
@@ -475,7 +475,7 @@ async function runStubTask(client, opts, home) {
     });
     const qres = await qp;
     const qtext = (qres.result?.content ?? []).map((c) => c.text ?? "").join("\n");
-    const qm = qtext.match(/---tianshu-mcp-meta---\n([\s\S]*?)\n---tianshu-mcp-meta---/);
+    const qm = qtext.match(/---agent-foreman-meta---\n([\s\S]*?)\n---agent-foreman-meta---/);
     const status = qm ? JSON.parse(qm[1]).status : undefined;
     if (["succeeded", "failed", "needs_attention", "cancelled", "interrupted"].includes(status)) {
       assert(status === "succeeded", `stub 任务终态应为 succeeded，实际 ${status}`);

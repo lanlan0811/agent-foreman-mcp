@@ -44,10 +44,10 @@ async function fixture(html: string, overrides: Record<string, unknown> = {}, pr
     );
   return { capture, project, url, closeBrowser: () => browser.close() };
 }
-describe.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")("real visual capture", () => {
+describe.skipIf(process.env.AGENT_FOREMAN_VISUAL_BROWSER_TEST !== "1")("real visual capture", () => {
   it("records blocked WebSockets even before the document root exists", async () => {
     const h = await fixture(
-      `<script>try { new WebSocket('ws://127.0.0.1:1'); } catch {} document.documentElement.removeAttribute('data-tianshu-blocked-ws');</script><main>Socket policy</main>`,
+      `<script>try { new WebSocket('ws://127.0.0.1:1'); } catch {} document.documentElement.removeAttribute('data-agent-foreman-blocked-ws');</script><main>Socket policy</main>`,
     );
     await expect(h.capture()).rejects.toMatchObject({ code: "RESOURCE_BLOCKED" });
   });

@@ -123,7 +123,7 @@ describe("R4 extraChecks / optional 语义", () => {
   it("optional 检查失败不影响 verdict（passed=true）", async () => {
     const proj = await makeGitProject("good");
     tempDirs.push(proj);
-    const acceptancePath = path.join(proj, ".tianshu-mcp", "acceptance.json");
+    const acceptancePath = path.join(proj, ".agent-foreman", "acceptance.json");
     const acceptance = JSON.parse(await fsp.readFile(acceptancePath, "utf8"));
     acceptance.requireChanges = false;
     await fsp.writeFile(acceptancePath, JSON.stringify(acceptance, null, 2), "utf8");

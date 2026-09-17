@@ -156,7 +156,7 @@ export const ServerConfigSchema = z.object({
     .default(5 * 60_000),
   /**
    * 验收命令检查并行度（worker 池上限）：1=串行（与历史行为一致），默认 2，上限 4。
-   * 项目级 .tianshu-mcp/acceptance.json 的 verifyConcurrency 可覆盖。
+   * 项目级 .agent-foreman/acceptance.json 的 verifyConcurrency 可覆盖。
    */
   verifyConcurrency: z.number().int().min(1).max(4).default(2),
   skills: z
@@ -356,7 +356,7 @@ export type ProjectRecord = z.infer<typeof ProjectRecordSchema>;
 export const ProjectsFileSchema = z.record(z.string().min(1), ProjectRecordSchema);
 export type ProjectsFile = z.infer<typeof ProjectsFileSchema>;
 
-/* ---------------- 项目内 .tianshu-mcp/acceptance.json ---------------- */
+/* ---------------- 项目内 .agent-foreman/acceptance.json ---------------- */
 
 export const AcceptanceConfigSchema = z.object({
   checks: z.array(AcceptanceCheckSchema).optional(),

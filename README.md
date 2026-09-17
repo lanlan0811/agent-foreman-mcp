@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="./assets/tianshu-mcp-banner.svg" alt="tianshu-mcp" width="100%">
+<img src="./assets/agent-foreman-banner.svg" alt="agent-foreman-mcp" width="100%">
 
 <br/>
 
-<img src="./assets/tianshu-mcp-icon.svg" alt="tianshu-mcp 图标" width="132" height="132">
+<img src="./assets/agent-foreman-icon.svg" alt="agent-foreman-mcp 图标" width="132" height="132">
 
 # tianshu-mcp
 

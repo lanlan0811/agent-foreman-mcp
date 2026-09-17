@@ -18,11 +18,11 @@ const execFileAsync = promisify(execFile);
 const WINDOWS_LIST_SCRIPT = String.raw`
 Add-Type @'
 using System; using System.Text; using System.Runtime.InteropServices;
-public static class TianshuCodexDlg { public delegate bool EnumProc(IntPtr h, IntPtr l); [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l); [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, StringBuilder s, int n); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p); }
+public static class AgentForemanCodexDlg { public delegate bool EnumProc(IntPtr h, IntPtr l); [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l); [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, StringBuilder s, int n); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p); }
 '@
-$ids=($env:TIANSHU_CODEX_PIDS -split ',')
+$ids=($env:AGENT_FOREMAN_CODEX_PIDS -split ',')
 $out=@()
-[TianshuCodexDlg]::EnumWindows({param($h,$l) $b=New-Object Text.StringBuilder 256; [void][TianshuCodexDlg]::GetClassName($h,$b,$b.Capacity); [uint32]$ownerPid=0; [void][TianshuCodexDlg]::GetWindowThreadProcessId($h,[ref]$ownerPid); if($b.ToString() -eq '#32770' -and $ids -contains [string]$ownerPid){$script:out += [string]$h.ToInt64()}; return $true},[IntPtr]::Zero)|Out-Null
+[AgentForemanCodexDlg]::EnumWindows({param($h,$l) $b=New-Object Text.StringBuilder 256; [void][AgentForemanCodexDlg]::GetClassName($h,$b,$b.Capacity); [uint32]$ownerPid=0; [void][AgentForemanCodexDlg]::GetWindowThreadProcessId($h,[ref]$ownerPid); if($b.ToString() -eq '#32770' -and $ids -contains [string]$ownerPid){$script:out += [string]$h.ToInt64()}; return $true},[IntPtr]::Zero)|Out-Null
 $out -join ','`;
 
 const WINDOWS_SELECT_SCRIPT = String.raw`
@@ -32,7 +32,7 @@ Add-Type @'
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
-public static class TianshuCodexNative {
+public static class AgentForemanCodexNative {
   public const uint BM_CLICK = 0x00F5;
   public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
   public const uint MOUSEEVENTF_LEFTUP = 0x0004;
@@ -72,20 +72,20 @@ public static class TianshuCodexNative {
   }
 }
 '@
-$baseline=($env:TIANSHU_DIALOG_BASELINE -split ',')
-$owners=($env:TIANSHU_CODEX_PIDS -split ',')
+$baseline=($env:AGENT_FOREMAN_DIALOG_BASELINE -split ',')
+$owners=($env:AGENT_FOREMAN_CODEX_PIDS -split ',')
 # 用 Win32 EnumWindows 直接找对话框句柄：比 UIA RootElement.Children 更可靠
 # （实测 Codex 的 Select Project Root 通过 UIA 顶层枚举会漏掉，但 EnumWindows 能找到）。
 $deadline=(Get-Date).AddSeconds(20)
 $targetHandle=$null
 do {
   $script:found=@()
-  [TianshuCodexNative]::EnumWindows({param($h,$l)
-    if([TianshuCodexNative]::IsWindowVisible($h)){
-      $cls=New-Object Text.StringBuilder 256; [void][TianshuCodexNative]::GetClassName($h,$cls,256)
+  [AgentForemanCodexNative]::EnumWindows({param($h,$l)
+    if([AgentForemanCodexNative]::IsWindowVisible($h)){
+      $cls=New-Object Text.StringBuilder 256; [void][AgentForemanCodexNative]::GetClassName($h,$cls,256)
       if($cls.ToString() -eq '#32770'){
-        $t=New-Object Text.StringBuilder 512; [void][TianshuCodexNative]::GetWindowText($h,$t,512)
-        [uint32]$p=0; [void][TianshuCodexNative]::GetWindowThreadProcessId($h,[ref]$p)
+        $t=New-Object Text.StringBuilder 512; [void][AgentForemanCodexNative]::GetWindowText($h,$t,512)
+        [uint32]$p=0; [void][AgentForemanCodexNative]::GetWindowThreadProcessId($h,[ref]$p)
         if($baseline -notcontains ([string]$h.ToInt64()) -and $owners -contains ([string]$p) -and $t.ToString() -match 'Select Project Root|选择|打开|Select|Choose|Browse'){
           $script:found += $h.ToInt64()
         }
@@ -118,20 +118,20 @@ $activationAttempt=0
 $editDeadline=(Get-Date).AddSeconds(10)
 do {
   if($editCount -eq 0 -and $activationAttempt -in @(0,3)){
-    [void][TianshuCodexNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
+    [void][AgentForemanCodexNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
     Start-Sleep -Milliseconds 150
-    if([TianshuCodexNative]::GetForegroundWindow().ToInt64() -eq [Int64]$targetHandle){
-      [TianshuCodexNative]::keybd_event(0x11,0,0,[UIntPtr]::Zero)
-      [TianshuCodexNative]::keybd_event(0x4c,0,0,[UIntPtr]::Zero)
-      [TianshuCodexNative]::keybd_event(0x4c,0,2,[UIntPtr]::Zero)
-      [TianshuCodexNative]::keybd_event(0x11,0,2,[UIntPtr]::Zero)
+    if([AgentForemanCodexNative]::GetForegroundWindow().ToInt64() -eq [Int64]$targetHandle){
+      [AgentForemanCodexNative]::keybd_event(0x11,0,0,[UIntPtr]::Zero)
+      [AgentForemanCodexNative]::keybd_event(0x4c,0,0,[UIntPtr]::Zero)
+      [AgentForemanCodexNative]::keybd_event(0x4c,0,2,[UIntPtr]::Zero)
+      [AgentForemanCodexNative]::keybd_event(0x11,0,2,[UIntPtr]::Zero)
     }
   } elseif($editCount -eq 0 -and $activationAttempt -in @(1,4)) {
-    [void][TianshuCodexNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
+    [void][AgentForemanCodexNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
     Start-Sleep -Milliseconds 150
-    [void][TianshuCodexNative]::SetCursorPos($addressX,$addressY)
-    [TianshuCodexNative]::mouse_event([TianshuCodexNative]::MOUSEEVENTF_LEFTDOWN,0,0,0,[UIntPtr]::Zero)
-    [TianshuCodexNative]::mouse_event([TianshuCodexNative]::MOUSEEVENTF_LEFTUP,0,0,0,[UIntPtr]::Zero)
+    [void][AgentForemanCodexNative]::SetCursorPos($addressX,$addressY)
+    [AgentForemanCodexNative]::mouse_event([AgentForemanCodexNative]::MOUSEEVENTF_LEFTDOWN,0,0,0,[UIntPtr]::Zero)
+    [AgentForemanCodexNative]::mouse_event([AgentForemanCodexNative]::MOUSEEVENTF_LEFTUP,0,0,0,[UIntPtr]::Zero)
   }
   $activationAttempt++
   Start-Sleep -Milliseconds 250
@@ -147,24 +147,24 @@ do {
 } while($editCount -ne 1 -and (Get-Date) -lt $editDeadline)
 if($editCount -ne 1){throw "Codex 文件夹地址输入框无法唯一定位（匹配 $editCount）"}
 $addressEditHandle=[IntPtr]$addressEdit.Current.NativeWindowHandle
-[void][TianshuCodexNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
+[void][AgentForemanCodexNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
 Start-Sleep -Milliseconds 150
 $editRect=$addressEdit.Current.BoundingRectangle
-[void][TianshuCodexNative]::SetCursorPos([int]($editRect.X+$editRect.Width/2),[int]($editRect.Y+$editRect.Height/2))
-[TianshuCodexNative]::mouse_event([TianshuCodexNative]::MOUSEEVENTF_LEFTDOWN,0,0,0,[UIntPtr]::Zero)
-[TianshuCodexNative]::mouse_event([TianshuCodexNative]::MOUSEEVENTF_LEFTUP,0,0,0,[UIntPtr]::Zero)
+[void][AgentForemanCodexNative]::SetCursorPos([int]($editRect.X+$editRect.Width/2),[int]($editRect.Y+$editRect.Height/2))
+[AgentForemanCodexNative]::mouse_event([AgentForemanCodexNative]::MOUSEEVENTF_LEFTDOWN,0,0,0,[UIntPtr]::Zero)
+[AgentForemanCodexNative]::mouse_event([AgentForemanCodexNative]::MOUSEEVENTF_LEFTUP,0,0,0,[UIntPtr]::Zero)
 Start-Sleep -Milliseconds 100
-if([TianshuCodexNative]::GetForegroundWindow().ToInt64() -ne [Int64]$targetHandle){throw 'Codex 文件夹地址输入前对话框未保持前台'}
-[TianshuCodexNative]::keybd_event(0x11,0,0,[UIntPtr]::Zero)
-[TianshuCodexNative]::keybd_event(0x41,0,0,[UIntPtr]::Zero)
-[TianshuCodexNative]::keybd_event(0x41,0,[TianshuCodexNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
-[TianshuCodexNative]::keybd_event(0x11,0,[TianshuCodexNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
-[TianshuCodexNative]::SendUnicodeText($env:TIANSHU_CODEX_FOLDER)
-$targetNorm=[IO.Path]::GetFullPath($env:TIANSHU_CODEX_FOLDER).TrimEnd('\').Replace('\','/').ToLowerInvariant()
+if([AgentForemanCodexNative]::GetForegroundWindow().ToInt64() -ne [Int64]$targetHandle){throw 'Codex 文件夹地址输入前对话框未保持前台'}
+[AgentForemanCodexNative]::keybd_event(0x11,0,0,[UIntPtr]::Zero)
+[AgentForemanCodexNative]::keybd_event(0x41,0,0,[UIntPtr]::Zero)
+[AgentForemanCodexNative]::keybd_event(0x41,0,[AgentForemanCodexNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
+[AgentForemanCodexNative]::keybd_event(0x11,0,[AgentForemanCodexNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
+[AgentForemanCodexNative]::SendUnicodeText($env:AGENT_FOREMAN_CODEX_FOLDER)
+$targetNorm=[IO.Path]::GetFullPath($env:AGENT_FOREMAN_CODEX_FOLDER).TrimEnd('\').Replace('\','/').ToLowerInvariant()
 Start-Sleep -Milliseconds 200
-if([TianshuCodexNative]::GetForegroundWindow().ToInt64() -ne [Int64]$targetHandle){throw 'Codex 路径提交前对话框未保持前台'}
-[TianshuCodexNative]::keybd_event(0x0d,0,0,[UIntPtr]::Zero)
-[TianshuCodexNative]::keybd_event(0x0d,0,[TianshuCodexNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
+if([AgentForemanCodexNative]::GetForegroundWindow().ToInt64() -ne [Int64]$targetHandle){throw 'Codex 路径提交前对话框未保持前台'}
+[AgentForemanCodexNative]::keybd_event(0x0d,0,0,[UIntPtr]::Zero)
+[AgentForemanCodexNative]::keybd_event(0x0d,0,[AgentForemanCodexNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
 $navigated=$false
 $navigationDeadline=(Get-Date).AddSeconds(15)
 do {
@@ -199,13 +199,13 @@ do {
   if(-not $confirmReady){Start-Sleep -Milliseconds 200}
 } while(-not $confirmReady -and (Get-Date) -lt $confirmDeadline)
 if(-not $confirmReady){throw "Codex 文件夹确认按钮未就绪（匹配 $confirmCount）"}
-[void][TianshuCodexNative]::SendMessage([IntPtr]$confirmButton.Current.NativeWindowHandle,[TianshuCodexNative]::BM_CLICK,[IntPtr]::Zero,[IntPtr]::Zero)
+[void][AgentForemanCodexNative]::SendMessage([IntPtr]$confirmButton.Current.NativeWindowHandle,[AgentForemanCodexNative]::BM_CLICK,[IntPtr]::Zero,[IntPtr]::Zero)
 $closeDeadline=(Get-Date).AddSeconds(5)
 do {
   Start-Sleep -Milliseconds 200
   $stillOpen=$false
   $script:still=@()
-  [TianshuCodexNative]::EnumWindows({param($h,$l) if(([string]$h.ToInt64()) -eq $targetHandle -and [TianshuCodexNative]::IsWindowVisible($h)){$script:still += 1};return $true},[IntPtr]::Zero)|Out-Null
+  [AgentForemanCodexNative]::EnumWindows({param($h,$l) if(([string]$h.ToInt64()) -eq $targetHandle -and [AgentForemanCodexNative]::IsWindowVisible($h)){$script:still += 1};return $true},[IntPtr]::Zero)|Out-Null
   if($script:still.Count -gt 0){$stillOpen=$true}
 } while($stillOpen -and (Get-Date) -lt $closeDeadline)
 if($stillOpen){throw 'Codex 文件夹对话框提交后仍未关闭'}`;
@@ -223,7 +223,7 @@ Add-Type @'
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
-public static class TianshuCodexDlgClose {
+public static class AgentForemanCodexDlgClose {
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
@@ -232,14 +232,14 @@ public static class TianshuCodexDlgClose {
   [DllImport("user32.dll", CharSet = CharSet.Auto)] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
 }
 '@
-$owners=($env:TIANSHU_CODEX_PIDS -split ',')
+$owners=($env:AGENT_FOREMAN_CODEX_PIDS -split ',')
 $script:closed=0
-[TianshuCodexDlgClose]::EnumWindows({param($h,$l)
-  if([TianshuCodexDlgClose]::IsWindowVisible($h)){
-    $c=New-Object Text.StringBuilder 256; [void][TianshuCodexDlgClose]::GetClassName($h,$c,256)
+[AgentForemanCodexDlgClose]::EnumWindows({param($h,$l)
+  if([AgentForemanCodexDlgClose]::IsWindowVisible($h)){
+    $c=New-Object Text.StringBuilder 256; [void][AgentForemanCodexDlgClose]::GetClassName($h,$c,256)
     if($c.ToString() -eq '#32770'){
-      [uint32]$p=0; [void][TianshuCodexDlgClose]::GetWindowThreadProcessId($h,[ref]$p)
-      if($owners -contains ([string]$p)){ [void][TianshuCodexDlgClose]::SendMessage($h,0x0010,[IntPtr]::Zero,[IntPtr]::Zero); $script:closed++ }
+      [uint32]$p=0; [void][AgentForemanCodexDlgClose]::GetWindowThreadProcessId($h,[ref]$p)
+      if($owners -contains ([string]$p)){ [void][AgentForemanCodexDlgClose]::SendMessage($h,0x0010,[IntPtr]::Zero,[IntPtr]::Zero); $script:closed++ }
     }
   }
   return $true
@@ -249,7 +249,7 @@ Write-Output $script:closed`;
     const { stdout } = await execFileAsync(
       "powershell.exe",
       ["-NoProfile", "-Command", script],
-      { env: { ...process.env, TIANSHU_CODEX_PIDS: pids.join(",") }, windowsHide: true, timeout: 30_000 },
+      { env: { ...process.env, AGENT_FOREMAN_CODEX_PIDS: pids.join(",") }, windowsHide: true, timeout: 30_000 },
     );
     return Number(stdout.trim()) || 0;
   } catch {
@@ -268,7 +268,7 @@ export async function listCodexDialogs(pids: number[]): Promise<string[]> {
       "powershell.exe",
       ["-NoProfile", "-Command", WINDOWS_LIST_SCRIPT],
       {
-        env: { ...process.env, TIANSHU_CODEX_PIDS: pids.join(",") },
+        env: { ...process.env, AGENT_FOREMAN_CODEX_PIDS: pids.join(",") },
         windowsHide: true,
         timeout: 45_000,
       },
@@ -295,9 +295,9 @@ export async function selectCodexFolder(
     await execFileAsync("powershell.exe", ["-NoProfile", "-Command", WINDOWS_SELECT_SCRIPT], {
       env: {
         ...process.env,
-        TIANSHU_CODEX_FOLDER: winPath,
-        TIANSHU_CODEX_PIDS: ownerPids.join(","),
-        TIANSHU_DIALOG_BASELINE: baseline.join(","),
+        AGENT_FOREMAN_CODEX_FOLDER: winPath,
+        AGENT_FOREMAN_CODEX_PIDS: ownerPids.join(","),
+        AGENT_FOREMAN_DIALOG_BASELINE: baseline.join(","),
       },
       windowsHide: true,
       timeout: 90_000,

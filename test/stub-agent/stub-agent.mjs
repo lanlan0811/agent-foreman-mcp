@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * stub-agent.mjs — 模拟外部 AI-Agent CLI（开发计划 §14）。
- * 行为由项目内 `.tianshu-mcp/playbook.json` 决定（{ playbook: "good" | "fix-on-first" | "never" }）：
+ * 行为由项目内 `.agent-foreman/playbook.json` 决定（{ playbook: "good" | "fix-on-first" | "never" }）：
  *   - good:         每次都把 done.txt 写成 PASS（一次通过）
  *   - fix-on-first: 第一轮（prompt 无"失败/修复"反馈）写成 FAIL；收到验收失败反馈后写成 PASS
  *   - never:        永远写成 FAIL（验证 needs_attention / 轮次上限）
@@ -21,7 +21,7 @@ async function main() {
   // 读取剧本（来自项目内配置，像真实 agent 依据项目上下文行事）
   let playbook = "good";
   let sleepMs = 400;
-  const cfgPath = path.join(cwd, ".tianshu-mcp", "playbook.json");
+  const cfgPath = path.join(cwd, ".agent-foreman", "playbook.json");
   try {
     const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
     if (cfg && typeof cfg.playbook === "string") playbook = cfg.playbook;

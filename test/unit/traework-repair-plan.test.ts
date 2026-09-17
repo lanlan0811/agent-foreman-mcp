@@ -217,7 +217,7 @@ describe("renderRepairPlan", () => {
 });
 
 describe("writeRepairPlan", () => {
-  it("只写入任务目录，不污染项目 .tianshu-mcp", async () => {
+  it("只写入任务目录，不污染项目 .agent-foreman", async () => {
     const root = await makeTmpRoot("repair");
     const taskDir = path.join(root, "tasks", "tsk_test");
     const projectDir = path.join(root, "proj");
@@ -230,7 +230,7 @@ describe("writeRepairPlan", () => {
     });
     expect(r.fileName).toBe("rework-tsk_test-r0.md");
     expect(fs.existsSync(r.taskPath)).toBe(true);
-    expect(fs.existsSync(path.join(projectDir, ".tianshu-mcp", r.fileName))).toBe(false);
+    expect(fs.existsSync(path.join(projectDir, ".agent-foreman", r.fileName))).toBe(false);
     expect(fs.readFileSync(r.taskPath, "utf8")).toContain("修复计划");
   });
 

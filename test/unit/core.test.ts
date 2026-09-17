@@ -20,7 +20,7 @@ describe("路径规范化", () => {
     expect(p).not.toContain("\\");
   });
   it("相同路径 hash 稳定且 16 位", () => {
-    const base = path.resolve("tianshu-mcp");
+    const base = path.resolve("agent-foreman-mcp");
     const a = projectHash(base);
     const b = projectHash(`${base}${path.sep}`);
     const c = projectHash(base);

@@ -71,11 +71,11 @@ export async function buildServer(
   });
 
   const server = new McpServer(
-    { name: "tianshu-mcp", version: MCP_SERVER_VERSION },
+    { name: "agent-foreman-mcp", version: MCP_SERVER_VERSION },
     {
       capabilities: { tools: {} },
       instructions:
-        "tianshu-mcp：调度外部 AI-Agent（codex/zcode/traework）完成项目开发、验收、返修闭环。ZCode 提问或等待用户环境处理时进入 needs_user，可用 continue_task 恢复原会话。run_task 异步返回 taskId，再用 query_task 轮询。",
+        "agent-foreman-mcp：调度外部 AI-Agent（codex/zcode/traework）完成项目开发、验收、返修闭环。ZCode 提问或等待用户环境处理时进入 needs_user，可用 continue_task 恢复原会话。run_task 异步返回 taskId，再用 query_task 轮询。",
     },
   );
 

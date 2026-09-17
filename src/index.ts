@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * tianshu-mcp 入口：stdio 启动 MCP server。
- * 用法：node dist/index.js   （env TIANSHU_MCP_HOME 可选覆盖数据目录）
+ * agent-foreman-mcp 入口：stdio 启动 MCP server。
+ * 用法：node dist/index.js   （env AGENT_FOREMAN_HOME 可选覆盖数据目录）
  * 退出：SIGINT/SIGTERM / stdin EOF → 归档任务 → 杀子进程 → 退出。
  */
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -20,12 +20,12 @@ async function main(): Promise<void> {
   const home = resolveDataHome();
   const logger = await Logger.create(path.join(home, "logs"));
   const skipSkillInstall =
-    process.argv.includes("--no-skill-install") || process.env.TIANSHU_MCP_NO_SKILL_INSTALL === "1";
+    process.argv.includes("--no-skill-install") || process.env.AGENT_FOREMAN_NO_SKILL_INSTALL === "1";
 
   const assembly = await buildServer({ logger, skipSkillInstall });
   const transport = new StdioServerTransport();
   await assembly.server.connect(transport);
-  logger.info(`tianshu-mcp 已连接（stdio）。数据目录: ${home}，工具数: ${TOOL_DEFS.length}`);
+  logger.info(`agent-foreman-mcp 已连接（stdio）。数据目录: ${home}，工具数: ${TOOL_DEFS.length}`);
 
   let closing = false;
   const shutdown = async (why: string): Promise<void> => {
@@ -44,6 +44,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((e) => {
-  console.error("tianshu-mcp 启动失败:", e instanceof Error ? e.message : e);
+  console.error("agent-foreman-mcp 启动失败:", e instanceof Error ? e.message : e);
   process.exit(1);
 });

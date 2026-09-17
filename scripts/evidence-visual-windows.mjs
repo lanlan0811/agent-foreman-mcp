@@ -62,7 +62,7 @@ const { revisions } = await loadBrowserTools();
 const pinnedChrome = revisions.PUPPETEER_REVISIONS.chrome;
 
 async function makeProject(html = "<main>Matrix</main>") {
-  const project = await fs.mkdtemp(path.join(os.tmpdir(), "tianshu-win-matrix-"));
+  const project = await fs.mkdtemp(path.join(os.tmpdir(), "agent-foreman-win-matrix-"));
   cleanup.push(() => fs.rm(project, { recursive: true, force: true }));
   await fs.writeFile(path.join(project, "index.html"), html);
   return project;
@@ -240,7 +240,7 @@ try {
   if (edgePath) {
     const { puppeteer } = await loadBrowserTools();
     const project = await makeProject("<main>Edge</main>");
-    const profile = await fs.mkdtemp(path.join(os.tmpdir(), "tianshu-edge-"));
+    const profile = await fs.mkdtemp(path.join(os.tmpdir(), "agent-foreman-edge-"));
     cleanup.push(() => fs.rm(profile, { recursive: true, force: true }));
     const browser = await puppeteer.launch({ executablePath: edgePath, userDataDir: profile, headless: true });
     try {
@@ -284,7 +284,7 @@ try {
 
   /* ---------- 5. 托管浏览器缺失时阻塞（不偷偷改用本机浏览器） ---------- */
   {
-    const missing = path.join(os.tmpdir(), "tianshu-missing-browser-" + Date.now(), "chrome.exe");
+    const missing = path.join(os.tmpdir(), "agent-foreman-missing-browser-" + Date.now(), "chrome.exe");
     await expectCode(
       "missing-explicit-browser-blocks",
       () => resolveBrowser({ mode: "executable", executablePath: missing }, home),

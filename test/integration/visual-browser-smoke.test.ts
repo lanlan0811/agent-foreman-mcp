@@ -5,12 +5,12 @@ import path from "node:path";
 import { loadBrowserTools, loadSharp, resolveBrowser } from "../../src/visual/runtime.js";
 import { resolveDataHome } from "../../src/config/store.js";
 
-it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
+it.skipIf(process.env.AGENT_FOREMAN_VISUAL_BROWSER_TEST !== "1")(
   "launches isolated pinned Chrome and decodes a real screenshot",
   async () => {
     const { puppeteer, revisions } = await loadBrowserTools();
     const executablePath = await resolveBrowser({ mode: "managed" }, resolveDataHome());
-    const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "tianshu-visual-smoke-"));
+    const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "agent-foreman-visual-smoke-"));
     const browser = await puppeteer.launch({ executablePath, userDataDir, headless: true });
     try {
       expect(await browser.version()).toContain(revisions.PUPPETEER_REVISIONS.chrome);
@@ -23,11 +23,11 @@ it.skipIf(process.env.TIANSHU_VISUAL_BROWSER_TEST !== "1")(
       const sharp = await loadSharp();
       const { info } = await sharp(image).raw().toBuffer({ resolveWithObject: true });
       expect([info.width, info.height]).toEqual([390, 844]);
-      if (process.env.TIANSHU_VISUAL_EVIDENCE) {
-        await fs.mkdir(process.env.TIANSHU_VISUAL_EVIDENCE, { recursive: true });
-        await fs.writeFile(path.join(process.env.TIANSHU_VISUAL_EVIDENCE, "screenshot.png"), image);
+      if (process.env.AGENT_FOREMAN_VISUAL_EVIDENCE) {
+        await fs.mkdir(process.env.AGENT_FOREMAN_VISUAL_EVIDENCE, { recursive: true });
+        await fs.writeFile(path.join(process.env.AGENT_FOREMAN_VISUAL_EVIDENCE, "screenshot.png"), image);
         await fs.writeFile(
-          path.join(process.env.TIANSHU_VISUAL_EVIDENCE, "environment.json"),
+          path.join(process.env.AGENT_FOREMAN_VISUAL_EVIDENCE, "environment.json"),
           JSON.stringify(
             {
               platform: process.platform,

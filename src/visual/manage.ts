@@ -198,7 +198,7 @@ export async function probeContentRules(
   const pages = config.pages.filter((page) => page.content && (!ruleId || `${page.id}-content` === ruleId));
   if (ruleId && !contents.length && !pages.length)
     throw new VisualError("CONTENT_RULE_UNKNOWN", `Unknown content rule: ${ruleId}`);
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "tianshu-content-probe-"));
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "agent-foreman-content-probe-"));
   const budget = new VisualBudget(config.limits);
   const services = new VisualServices(projectPath, budget);
   const browser = new VisualBrowser(config, home, budget);

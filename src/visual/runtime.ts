@@ -35,7 +35,7 @@ export async function loadBrowserTools() {
   } catch {
     throw new VisualError(
       "BROWSER_DEPENDENCY_MISSING",
-      "Reinstall tianshu-mcp browser dependencies",
+      "Reinstall agent-foreman-mcp browser dependencies",
     );
   }
 }
@@ -96,7 +96,7 @@ export async function resolveBrowser(
   throw new VisualError(
     "BROWSER_MISSING",
     config.mode === "managed"
-      ? "Managed browser missing. Run: tianshu-mcp visual browser install"
+      ? "Managed browser missing. Run: agent-foreman-mcp visual browser install"
       : "Selected browser missing; configure browser.executablePath",
   );
 }

@@ -150,7 +150,7 @@ function runTaskHandler(ctx: AppContext, defaults: Defaults): Handler {
     const record = (await dataHome.projectByPath(norm)).record;
     const finalAgentId = record?.defaultAgentId ?? agentId;
 
-    // 校验 agent 可解析（立即失败返回，不给天枢排队假象）
+    // 校验 agent 可解析（立即失败返回，不给宿主排队假象）
     const resolved = await ctx.registry.resolve(finalAgentId, true);
     if (!resolved.ok) {
       return formatToolResult(`agent '${finalAgentId}' 当前不可用：${resolved.message}`, {

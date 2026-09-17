@@ -33,7 +33,7 @@ async function run(options: Scenario): Promise<{ report: VerifyReport; passed: b
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "视觉 阻塞-home-"));
   dirs.push(project, home);
   await fs.mkdir(path.join(project, "assets"), { recursive: true });
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   const sharp = await loadSharp();
   await sharp({ create: { width: 4, height: 4, channels: 3, background: "#3355aa" } })
     .png()
@@ -41,7 +41,7 @@ async function run(options: Scenario): Promise<{ report: VerifyReport; passed: b
   const base = {
     id: "logo",
     files: ["assets/logo.png"],
-    expect: "blue gear with TIANSHU text",
+    expect: "blue gear with AGENT_FOREMAN text",
   };
   const config = {
     checks: [],
@@ -63,7 +63,7 @@ async function run(options: Scenario): Promise<{ report: VerifyReport; passed: b
     },
   };
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify(config),
   );
   savedEnv.CONTENT_JUDGE_MODE = process.env.CONTENT_JUDGE_MODE;
@@ -115,7 +115,7 @@ it("a rule-level command override that cannot resolve blocks the whole round too
 
 it("a missing declared host environment variable blocks the whole round", async () => {
   const { report, passed } = await run({
-    content: { env: { VISION_API_KEY: "TIANSHU_MISSING_HOST_VAR_FOR_TEST" } },
+    content: { env: { VISION_API_KEY: "AGENT_FOREMAN_MISSING_HOST_VAR_FOR_TEST" } },
   });
   expect(passed).toBe(false);
   expect(report.blockingIssues?.[0]?.code).toBe("CONTENT_ENV_MISSING");

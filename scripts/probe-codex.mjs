@@ -14,7 +14,7 @@
  *   node scripts/probe-codex.mjs --launch        # 允许启动受管实例并连 CDP
  *   node scripts/probe-codex.mjs --launch --port 9333
  *
- * 安全：--launch 只使用专属 user-data-dir（%LOCALAPPDATA%/tianshu-mcp/codex-gui/profile），
+ * 安全：--launch 只使用专属 user-data-dir（%LOCALAPPDATA%/agent-foreman-mcp/codex-gui/profile），
  * 不会触碰用户手动打开的 Codex 实例；脚本结束不杀实例（保留现场供排查）。
  */
 import { execFileSync } from "node:child_process";
@@ -34,7 +34,7 @@ const bad = (s) => line(`  \u2717 ${s}`);
 
 function userDataDir() {
   const base = process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local");
-  return path.join(base, "tianshu-mcp", "codex-gui", "profile");
+  return path.join(base, "agent-foreman-mcp", "codex-gui", "profile");
 }
 
 /* ---------- 步骤 1：安装发现 ---------- */
@@ -254,7 +254,7 @@ async function cdpProbe() {
 }
 
 async function main() {
-  line("tianshu-mcp · Codex 真机诊断");
+  line("agent-foreman-mcp · Codex 真机诊断");
   line(`平台=${process.platform}  模式=${LAUNCH ? "启动" : "只读"}  端口=${PORT}\n`);
   if (process.platform !== "win32") {
     bad("Codex MSIX 通道仅支持 Windows");

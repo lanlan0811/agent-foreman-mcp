@@ -308,7 +308,7 @@ describe("Codex 假 CDP 单轮流程", () => {
     expect(fake.permission).toBe("完全访问");
     // 初始指令包含计划文档与设计系统引用
     expect(fake.conversation).toContain("根据计划文档(plan/dev.md)和设计系统(.design)，进行项目开发");
-    expect(fake.conversation).toContain("【tianshu:tsk_codex:r0:initial】");
+    expect(fake.conversation).toContain("【agent-foreman:tsk_codex:r0:initial】");
   });
 
   it("项目不存在：走新建流程（原生对话框键盘驱动）后绑定成功", async () => {

@@ -7,7 +7,7 @@ import { VisualError } from "./errors.js";
 export async function readAcceptanceConfig(projectPath: string): Promise<AcceptanceConfig | null> {
   let text: string;
   try {
-    text = await fs.readFile(path.join(projectPath, ".tianshu-mcp", "acceptance.json"), "utf8");
+    text = await fs.readFile(path.join(projectPath, ".agent-foreman", "acceptance.json"), "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw new VisualError("CONFIG_UNREADABLE", `Cannot read acceptance.json: ${String(e)}`);

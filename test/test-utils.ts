@@ -23,7 +23,7 @@ export const STUB_SCRIPT = path.join(THIS_DIR, "stub-agent", "stub-agent.mjs");
 export type Playbook = "good" | "fix-on-first" | "never" | "sleep";
 
 export async function makeTmpRoot(tag: string): Promise<string> {
-  const root = path.join(os.tmpdir(), `tianshu-mcp-test-${tag}-${randomBytes(4).toString("hex")}`);
+  const root = path.join(os.tmpdir(), `agent-foreman-mcp-test-${tag}-${randomBytes(4).toString("hex")}`);
   await fsp.mkdir(root, { recursive: true });
   return root;
 }
@@ -36,7 +36,7 @@ function execGit(cwd: string, args: string[]): void {
 /** 复制 fixture 为一个独立 git 仓库项目（含初始 commit 基线） */
 export async function makeGitProject(playbook: Playbook, extra?: { sleepMs?: number }): Promise<string> {
   const tmp = await makeTmpRoot("proj");
-  await fsp.mkdir(path.join(tmp, ".tianshu-mcp"), { recursive: true });
+  await fsp.mkdir(path.join(tmp, ".agent-foreman"), { recursive: true });
   // 复制 fixture 文件（不含 .git 等）
   const entries = await fsp.readdir(FIXTURE_DIR, { withFileTypes: true });
   for (const e of entries) {
@@ -49,7 +49,7 @@ export async function makeGitProject(playbook: Playbook, extra?: { sleepMs?: num
     }
   }
   await fsp.writeFile(
-    path.join(tmp, ".tianshu-mcp", "playbook.json"),
+    path.join(tmp, ".agent-foreman", "playbook.json"),
     JSON.stringify({ playbook, ...(extra?.sleepMs ? { sleepMs: extra.sleepMs } : {}) }, null, 2),
     "utf8",
   );
@@ -59,7 +59,7 @@ export async function makeGitProject(playbook: Playbook, extra?: { sleepMs?: num
 
 /** 修改已有项目的 playbook 配置（供中途换剧本/加 sleep） */
 export async function writePlaybook(projectPath: string, cfg: { playbook: string; sleepMs?: number }): Promise<void> {
-  await fsp.writeFile(path.join(projectPath, ".tianshu-mcp", "playbook.json"), JSON.stringify(cfg, null, 2), "utf8");
+  await fsp.writeFile(path.join(projectPath, ".agent-foreman", "playbook.json"), JSON.stringify(cfg, null, 2), "utf8");
 }
 
 export async function gitInitAndCommit(projectPath: string): Promise<void> {
@@ -68,8 +68,8 @@ export async function gitInitAndCommit(projectPath: string): Promise<void> {
   } catch {
     execGit(projectPath, ["init", "-b", "main"]);
   }
-  execGit(projectPath, ["config", "user.email", "tianshu-mcp-test@example.com"]);
-  execGit(projectPath, ["config", "user.name", "tianshu-mcp-test"]);
+  execGit(projectPath, ["config", "user.email", "agent-foreman-mcp-test@example.com"]);
+  execGit(projectPath, ["config", "user.name", "agent-foreman-mcp-test"]);
   execGit(projectPath, ["add", "-A"]);
   execGit(projectPath, ["commit", "-m", "test baseline"]);
 }
@@ -149,7 +149,7 @@ export async function callTool(client: Client, name: string, args: Record<string
 
 /** 解析结果文本里的 meta JSON 块 */
 export function parseMeta(text: string): { before: string; meta: Record<string, unknown> | null } {
-  const m = text.match(/---tianshu-mcp-meta---\n([\s\S]*?)\n---tianshu-mcp-meta---/);
+  const m = text.match(/---agent-foreman-meta---\n([\s\S]*?)\n---agent-foreman-meta---/);
   if (!m) return { before: text, meta: null };
   try {
     return { before: text.replace(m[0], "").trim(), meta: JSON.parse(m[1]!) as Record<string, unknown> };

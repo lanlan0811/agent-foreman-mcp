@@ -966,7 +966,7 @@ export async function runZcodeTask(args: RunZcodeArgs): Promise<AgentRunResult> 
                 .digest("hex")
                 .slice(0, 8)}`
             : (ctx.resume?.kind ?? "initial");
-        const marker = `【tianshu:${ctx.taskId}:r${ctx.round}:${attempt}】`;
+        const marker = `【agent-foreman:${ctx.taskId}:r${ctx.round}:${attempt}】`;
         await cdp.dismissMenus();
         const before = await cdp.conversationText();
         const beforePoll = await cdp.poll();

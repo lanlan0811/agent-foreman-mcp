@@ -98,7 +98,7 @@ async function dispatchVisualCli(args: string[], signal: AbortSignal): Promise<v
       return;
     }
     await readAcceptanceConfig(project);
-    const filename = path.join(project, ".tianshu-mcp", "acceptance.json");
+    const filename = path.join(project, ".agent-foreman", "acceptance.json");
     let raw: Record<string, unknown> = {};
     try {
       raw = JSON.parse(await fs.readFile(filename, "utf8")) as Record<string, unknown>;
@@ -126,6 +126,6 @@ async function dispatchVisualCli(args: string[], signal: AbortSignal): Promise<v
     return;
   }
   throw new Error(
-    "Usage: tianshu-mcp visual init [project] | doctor [project] | browser install | baseline prepare/approve <request.json> | rules review <taskId> | rules approve <taskId> <reviewId> <digest> <approval-note> | artifacts clean <taskId> [--apply] | content probe <project> [ruleId] | content cache clear <taskId>",
+    "Usage: agent-foreman-mcp visual init [project] | doctor [project] | browser install | baseline prepare/approve <request.json> | rules review <taskId> | rules approve <taskId> <reviewId> <digest> <approval-note> | artifacts clean <taskId> [--apply] | content probe <project> [ruleId] | content cache clear <taskId>",
   );
 }

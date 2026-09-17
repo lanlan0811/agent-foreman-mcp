@@ -9,13 +9,13 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const root = path.join(
   os.tmpdir(),
-  `tianshu-zcode-e2e-${Date.now()}-${randomBytes(3).toString("hex")}`,
+  `agent-foreman-zcode-e2e-${Date.now()}-${randomBytes(3).toString("hex")}`,
 );
-await fsp.mkdir(path.join(root, ".tianshu-mcp"), { recursive: true });
+await fsp.mkdir(path.join(root, ".agent-foreman"), { recursive: true });
 await Promise.all([
   fsp.writeFile(
     path.join(root, "package.json"),
-    `${JSON.stringify({ name: "tianshu-zcode-e2e-fixture", private: true, type: "module" }, null, 2)}\n`,
+    `${JSON.stringify({ name: "agent-foreman-zcode-e2e-fixture", private: true, type: "module" }, null, 2)}\n`,
     "utf8",
   ),
   fsp.writeFile(
@@ -24,13 +24,13 @@ await Promise.all([
     "utf8",
   ),
   fsp.writeFile(
-    path.join(root, ".tianshu-mcp", "acceptance.json"),
+    path.join(root, ".agent-foreman", "acceptance.json"),
     `${JSON.stringify({ checks: [{ name: "done-file", cmd: ["node", "check.mjs"] }] }, null, 2)}\n`,
     "utf8",
   ),
   fsp.writeFile(
     path.join(root, "README.md"),
-    "# ZCode E2E fixture\n\nTemporary project for real-hardware tianshu-mcp acceptance.\n",
+    "# ZCode E2E fixture\n\nTemporary project for real-hardware agent-foreman-mcp acceptance.\n",
     "utf8",
   ),
 ]);

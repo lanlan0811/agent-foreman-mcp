@@ -1,5 +1,5 @@
 /**
- * DataHome：数据目录（~/.tianshu-mcp，env TIANSHU_MCP_HOME 覆盖）下的
+ * DataHome：数据目录（~/.agent-foreman，env AGENT_FOREMAN_HOME 覆盖）下的
  * config.json / agent-profiles.json / projects.json 读写与内存缓存。
  */
 import os from "node:os";
@@ -22,9 +22,9 @@ import { projectHash, normPath } from "../util/path.js";
 import { nowIso } from "../util/id.js";
 
 export function resolveDataHome(): string {
-  const env = process.env.TIANSHU_MCP_HOME;
+  const env = process.env.AGENT_FOREMAN_HOME;
   if (env && env.trim()) return path.resolve(env.trim());
-  return path.join(os.homedir(), ".tianshu-mcp");
+  return path.join(os.homedir(), ".agent-foreman");
 }
 
 /** 把 task.jsonl 等事件里的字符串命令转成规范化 argv */

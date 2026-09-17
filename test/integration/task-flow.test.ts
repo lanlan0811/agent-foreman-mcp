@@ -30,7 +30,7 @@ async function projectFor(playbook: Playbook): Promise<string> {
 }
 
 async function disableRequireChanges(projectPath: string): Promise<void> {
-  const acceptancePath = path.join(projectPath, ".tianshu-mcp", "acceptance.json");
+  const acceptancePath = path.join(projectPath, ".agent-foreman", "acceptance.json");
   const acceptance = JSON.parse(await fs.readFile(acceptancePath, "utf8"));
   acceptance.requireChanges = false;
   await fs.writeFile(acceptancePath, JSON.stringify(acceptance, null, 2), "utf8");

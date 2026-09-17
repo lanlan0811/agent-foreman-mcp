@@ -35,16 +35,16 @@ const WINDOWS_LIST_SCRIPT = String.raw`
 $ErrorActionPreference='Stop'
 Add-Type @'
 using System; using System.Text; using System.Runtime.InteropServices;
-public static class TianshuDlg { public delegate bool EnumProc(IntPtr h, IntPtr l); [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l); [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, StringBuilder s, int n); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p); }
+public static class AgentForemanDlg { public delegate bool EnumProc(IntPtr h, IntPtr l); [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l); [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, StringBuilder s, int n); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p); }
 '@
-$ids=($env:TIANSHU_ZCODE_PIDS -split ',')
+$ids=($env:AGENT_FOREMAN_ZCODE_PIDS -split ',')
 $out=@()
-[TianshuDlg]::EnumWindows({param($h,$l) $b=New-Object Text.StringBuilder 256; [void][TianshuDlg]::GetClassName($h,$b,$b.Capacity); [uint32]$dialogOwnerPid=0; [void][TianshuDlg]::GetWindowThreadProcessId($h,[ref]$dialogOwnerPid); if($b.ToString() -eq '#32770' -and $ids -contains [string]$dialogOwnerPid){$script:out += [string]$h.ToInt64()}; return $true},[IntPtr]::Zero)|Out-Null
+[AgentForemanDlg]::EnumWindows({param($h,$l) $b=New-Object Text.StringBuilder 256; [void][AgentForemanDlg]::GetClassName($h,$b,$b.Capacity); [uint32]$dialogOwnerPid=0; [void][AgentForemanDlg]::GetWindowThreadProcessId($h,[ref]$dialogOwnerPid); if($b.ToString() -eq '#32770' -and $ids -contains [string]$dialogOwnerPid){$script:out += [string]$h.ToInt64()}; return $true},[IntPtr]::Zero)|Out-Null
 $out -join ','`;
 
 const WINDOWS_SELECT_SCRIPT = String.raw`
 $ErrorActionPreference='Stop'
-$operationDeadline=[DateTimeOffset]::FromUnixTimeMilliseconds([Int64]$env:TIANSHU_DIALOG_DEADLINE).LocalDateTime
+$operationDeadline=[DateTimeOffset]::FromUnixTimeMilliseconds([Int64]$env:AGENT_FOREMAN_DIALOG_DEADLINE).LocalDateTime
 function Assert-Deadline { if((Get-Date) -ge $operationDeadline){throw 'ZCODE_DIALOG_TIMEOUT'} }
 Write-Output 'native:initialize'
 
@@ -52,7 +52,7 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class TianshuDialogNative {
+public static class AgentForemanDialogNative {
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
@@ -106,16 +106,16 @@ public static class TianshuDialogNative {
   }
 }
 '@
-$baseline=($env:TIANSHU_DIALOG_BASELINE -split ',')
-$owners=($env:TIANSHU_ZCODE_PIDS -split ',')
+$baseline=($env:AGENT_FOREMAN_DIALOG_BASELINE -split ',')
+$owners=($env:AGENT_FOREMAN_ZCODE_PIDS -split ',')
 function Get-OwnedDialogs {
   $script:ownedHandles=@()
-  [TianshuDialogNative]::EnumWindows({param($h,$l)
+  [AgentForemanDialogNative]::EnumWindows({param($h,$l)
     [uint32]$ownerId=0
-    [void][TianshuDialogNative]::GetWindowThreadProcessId($h,[ref]$ownerId)
+    [void][AgentForemanDialogNative]::GetWindowThreadProcessId($h,[ref]$ownerId)
     if($owners -contains [string]$ownerId){
       $class=New-Object Text.StringBuilder 256
-      [void][TianshuDialogNative]::GetClassName($h,$class,$class.Capacity)
+      [void][AgentForemanDialogNative]::GetClassName($h,$class,$class.Capacity)
       if($class.ToString() -eq '#32770'){$script:ownedHandles += $h}
     }
     return $true
@@ -124,9 +124,9 @@ function Get-OwnedDialogs {
 }
 function Get-TargetDialog {
   $handle=[IntPtr][Int64]$targetHandle
-  if(-not [TianshuDialogNative]::IsWindow($handle)){return $null}
+  if(-not [AgentForemanDialogNative]::IsWindow($handle)){return $null}
   [uint32]$ownerId=0
-  [void][TianshuDialogNative]::GetWindowThreadProcessId($handle,[ref]$ownerId)
+  [void][AgentForemanDialogNative]::GetWindowThreadProcessId($handle,[ref]$ownerId)
   if($owners -notcontains [string]$ownerId){throw 'ZCODE_DIALOG_OWNER_CHANGED'}
   return [System.Windows.Automation.AutomationElement]::FromHandle($handle)
 }
@@ -167,20 +167,20 @@ Write-Output 'native:activate-address-control'
 $editDeadline=$operationDeadline
 do {
   if($editCount -eq 0 -and $activationAttempt -in @(0,3)){
-    [void][TianshuDialogNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
+    [void][AgentForemanDialogNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
     Start-Sleep -Milliseconds 150
-    if([TianshuDialogNative]::GetForegroundWindow().ToInt64() -eq [Int64]$targetHandle){
-      [TianshuDialogNative]::keybd_event(0x11,0,0,[UIntPtr]::Zero)
-      [TianshuDialogNative]::keybd_event(0x4c,0,0,[UIntPtr]::Zero)
-      [TianshuDialogNative]::keybd_event(0x4c,0,2,[UIntPtr]::Zero)
-      [TianshuDialogNative]::keybd_event(0x11,0,2,[UIntPtr]::Zero)
+    if([AgentForemanDialogNative]::GetForegroundWindow().ToInt64() -eq [Int64]$targetHandle){
+      [AgentForemanDialogNative]::keybd_event(0x11,0,0,[UIntPtr]::Zero)
+      [AgentForemanDialogNative]::keybd_event(0x4c,0,0,[UIntPtr]::Zero)
+      [AgentForemanDialogNative]::keybd_event(0x4c,0,2,[UIntPtr]::Zero)
+      [AgentForemanDialogNative]::keybd_event(0x11,0,2,[UIntPtr]::Zero)
     }
   } elseif($editCount -eq 0 -and $activationAttempt -in @(1,4)) {
-    [void][TianshuDialogNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
+    [void][AgentForemanDialogNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
     Start-Sleep -Milliseconds 150
-    [void][TianshuDialogNative]::SetCursorPos($addressX,$addressY)
-    [TianshuDialogNative]::mouse_event([TianshuDialogNative]::MOUSEEVENTF_LEFTDOWN,0,0,0,[UIntPtr]::Zero)
-    [TianshuDialogNative]::mouse_event([TianshuDialogNative]::MOUSEEVENTF_LEFTUP,0,0,0,[UIntPtr]::Zero)
+    [void][AgentForemanDialogNative]::SetCursorPos($addressX,$addressY)
+    [AgentForemanDialogNative]::mouse_event([AgentForemanDialogNative]::MOUSEEVENTF_LEFTDOWN,0,0,0,[UIntPtr]::Zero)
+    [AgentForemanDialogNative]::mouse_event([AgentForemanDialogNative]::MOUSEEVENTF_LEFTUP,0,0,0,[UIntPtr]::Zero)
   }
   $activationAttempt++
   Start-Sleep -Milliseconds 250
@@ -196,26 +196,26 @@ do {
 } while($editCount -ne 1 -and (Get-Date) -lt $editDeadline)
 if($editCount -ne 1){throw "ZCode 文件夹地址输入框无法唯一定位（匹配 $editCount）"}
 $addressEditHandle=[IntPtr]$addressEdit.Current.NativeWindowHandle
-[void][TianshuDialogNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
+[void][AgentForemanDialogNative]::SetForegroundWindow([IntPtr][Int64]$targetHandle)
 Start-Sleep -Milliseconds 150
 $editRect=$addressEdit.Current.BoundingRectangle
-[void][TianshuDialogNative]::SetCursorPos([int]($editRect.X+$editRect.Width/2),[int]($editRect.Y+$editRect.Height/2))
-[TianshuDialogNative]::mouse_event([TianshuDialogNative]::MOUSEEVENTF_LEFTDOWN,0,0,0,[UIntPtr]::Zero)
-[TianshuDialogNative]::mouse_event([TianshuDialogNative]::MOUSEEVENTF_LEFTUP,0,0,0,[UIntPtr]::Zero)
+[void][AgentForemanDialogNative]::SetCursorPos([int]($editRect.X+$editRect.Width/2),[int]($editRect.Y+$editRect.Height/2))
+[AgentForemanDialogNative]::mouse_event([AgentForemanDialogNative]::MOUSEEVENTF_LEFTDOWN,0,0,0,[UIntPtr]::Zero)
+[AgentForemanDialogNative]::mouse_event([AgentForemanDialogNative]::MOUSEEVENTF_LEFTUP,0,0,0,[UIntPtr]::Zero)
 Start-Sleep -Milliseconds 100
-if([TianshuDialogNative]::GetForegroundWindow().ToInt64() -ne [Int64]$targetHandle){throw 'ZCode 文件夹地址输入前对话框未保持前台'}
-[TianshuDialogNative]::keybd_event(0x11,0,0,[UIntPtr]::Zero)
-[TianshuDialogNative]::keybd_event(0x41,0,0,[UIntPtr]::Zero)
-[TianshuDialogNative]::keybd_event(0x41,0,[TianshuDialogNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
-[TianshuDialogNative]::keybd_event(0x11,0,[TianshuDialogNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
+if([AgentForemanDialogNative]::GetForegroundWindow().ToInt64() -ne [Int64]$targetHandle){throw 'ZCode 文件夹地址输入前对话框未保持前台'}
+[AgentForemanDialogNative]::keybd_event(0x11,0,0,[UIntPtr]::Zero)
+[AgentForemanDialogNative]::keybd_event(0x41,0,0,[UIntPtr]::Zero)
+[AgentForemanDialogNative]::keybd_event(0x41,0,[AgentForemanDialogNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
+[AgentForemanDialogNative]::keybd_event(0x11,0,[AgentForemanDialogNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
 Assert-Deadline
 Write-Output 'native:input-path'
-[TianshuDialogNative]::SendUnicodeText($env:TIANSHU_ZCODE_FOLDER)
-$targetNorm=[IO.Path]::GetFullPath($env:TIANSHU_ZCODE_FOLDER).TrimEnd('\').Replace('\','/').ToLowerInvariant()
+[AgentForemanDialogNative]::SendUnicodeText($env:AGENT_FOREMAN_ZCODE_FOLDER)
+$targetNorm=[IO.Path]::GetFullPath($env:AGENT_FOREMAN_ZCODE_FOLDER).TrimEnd('\').Replace('\','/').ToLowerInvariant()
 Start-Sleep -Milliseconds 200
-if([TianshuDialogNative]::GetForegroundWindow().ToInt64() -ne [Int64]$targetHandle){throw 'ZCode 路径提交前对话框未保持前台'}
-[TianshuDialogNative]::keybd_event(0x0d,0,0,[UIntPtr]::Zero)
-[TianshuDialogNative]::keybd_event(0x0d,0,[TianshuDialogNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
+if([AgentForemanDialogNative]::GetForegroundWindow().ToInt64() -ne [Int64]$targetHandle){throw 'ZCode 路径提交前对话框未保持前台'}
+[AgentForemanDialogNative]::keybd_event(0x0d,0,0,[UIntPtr]::Zero)
+[AgentForemanDialogNative]::keybd_event(0x0d,0,[AgentForemanDialogNative]::KEYEVENTF_KEYUP,[UIntPtr]::Zero)
 $navigated=$false
 Write-Output 'native:verify-navigation'
 $navigationDeadline=$operationDeadline
@@ -255,7 +255,7 @@ do {
 if(-not $confirmReady){throw "ZCode 文件夹确认按钮未就绪（匹配 $confirmCount）"}
 Assert-Deadline
 Write-Output 'native:submit-once'
-[void][TianshuDialogNative]::SendMessage([IntPtr]$confirmButton.Current.NativeWindowHandle,[TianshuDialogNative]::BM_CLICK,[IntPtr]::Zero,[IntPtr]::Zero)
+[void][AgentForemanDialogNative]::SendMessage([IntPtr]$confirmButton.Current.NativeWindowHandle,[AgentForemanDialogNative]::BM_CLICK,[IntPtr]::Zero,[IntPtr]::Zero)
 $closeDeadline=$operationDeadline
 do {
   Start-Sleep -Milliseconds 200
@@ -303,7 +303,7 @@ end tell`;
     "powershell.exe",
     ["-NoProfile", "-Command", WINDOWS_LIST_SCRIPT],
     {
-      env: { ...process.env, TIANSHU_ZCODE_PIDS: pids.join(",") },
+      env: { ...process.env, AGENT_FOREMAN_ZCODE_PIDS: pids.join(",") },
       windowsHide: true,
       timeout: timeoutMs,
       signal: options.signal,
@@ -328,10 +328,10 @@ export async function selectZcodeFolder(
         {
           env: {
             ...process.env,
-            TIANSHU_ZCODE_FOLDER: folder,
-            TIANSHU_ZCODE_PIDS: ownerPids.join(","),
-            TIANSHU_DIALOG_BASELINE: baseline.join(","),
-            TIANSHU_DIALOG_DEADLINE: String(Date.now() + timeoutMs),
+            AGENT_FOREMAN_ZCODE_FOLDER: folder,
+            AGENT_FOREMAN_ZCODE_PIDS: ownerPids.join(","),
+            AGENT_FOREMAN_DIALOG_BASELINE: baseline.join(","),
+            AGENT_FOREMAN_DIALOG_DEADLINE: String(Date.now() + timeoutMs),
           },
           windowsHide: true,
           timeout: timeoutMs,

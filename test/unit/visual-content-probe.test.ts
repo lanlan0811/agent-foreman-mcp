@@ -19,13 +19,13 @@ async function fixture(): Promise<{ project: string; home: string }> {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "视觉 探测-home-"));
   dirs.push(project, home);
   await fs.mkdir(path.join(project, "assets"), { recursive: true });
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   const sharp = await loadSharp();
   await sharp({ create: { width: 4, height: 4, channels: 3, background: "#3355aa" } })
     .png()
     .toFile(path.join(project, "assets", "logo.png"));
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify({
       visual: {
         enabled: true,
@@ -37,7 +37,7 @@ async function fixture(): Promise<{ project: string; home: string }> {
           timeoutMs: 30_000,
         },
         contents: [
-          { id: "logo", files: ["assets/logo.png"], expect: "blue gear with TIANSHU text" },
+          { id: "logo", files: ["assets/logo.png"], expect: "blue gear with AGENT_FOREMAN text" },
         ],
       },
     }),

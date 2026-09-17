@@ -16,7 +16,7 @@ describe("resolveProjectDir", () => {
   });
 
   it("拒绝不存在的目录", () => {
-    expect(() => resolveProjectDir("/no/such/dir-tianshu-mcp-test")).toThrow(/不存在/);
+    expect(() => resolveProjectDir("/no/such/dir-agent-foreman-mcp-test")).toThrow(/不存在/);
   });
 
   it("拒绝文件（必须是目录）", async () => {

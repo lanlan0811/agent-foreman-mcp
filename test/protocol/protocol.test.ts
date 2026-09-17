@@ -20,7 +20,7 @@ afterAll(async () => {
 describe("服务版本", () => {
   it("MCP serverInfo.version 等于 package.json.version（单一版本源，S4）", async () => {
     const info = ts.client.getServerVersion()!;
-    expect(info.name).toBe("tianshu-mcp");
+    expect(info.name).toBe("agent-foreman-mcp");
     expect(info.version).toBe(pkg.version);
   });
 });

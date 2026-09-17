@@ -38,7 +38,7 @@ describe("ZCode native dialog budgets and unknown baselines", () => {
       timeout: 1234,
       signal: controller.signal,
       windowsHide: true,
-      env: { TIANSHU_ZCODE_PIDS: "7" },
+      env: { AGENT_FOREMAN_ZCODE_PIDS: "7" },
     });
   });
   it("does not convert macOS permission failure or malformed output to an empty baseline", async () => {
@@ -61,7 +61,7 @@ describe("ZCode native dialog budgets and unknown baselines", () => {
     ).toMatchObject({ ok: true });
     const options = native.mock.calls[0]?.[2];
     expect(options.timeout).toBe(4321);
-    expect(Number(options.env.TIANSHU_DIALOG_DEADLINE)).toBeGreaterThanOrEqual(started + 4321);
+    expect(Number(options.env.AGENT_FOREMAN_DIALOG_DEADLINE)).toBeGreaterThanOrEqual(started + 4321);
     expect(native.mock.calls[0]?.[1][2]).not.toMatch(/AddSeconds/);
   });
   it("preserves abort errors rather than treating cancelled input as retryable selection", async () => {

@@ -59,7 +59,7 @@ export class VisualBrowser {
     this.budget.check();
     const { puppeteer, revisions } = await loadBrowserTools();
     const executablePath = await resolveBrowser(this.config.browser, this.home);
-    this.profile = await fs.mkdtemp(path.join(os.tmpdir(), "tianshu-visual-"));
+    this.profile = await fs.mkdtemp(path.join(os.tmpdir(), "agent-foreman-visual-"));
     try {
       this.browser = await puppeteer.launch({
         executablePath,
@@ -133,7 +133,7 @@ export class VisualBrowser {
         void (ok ? request.continue() : request.abort("blockedbyclient")).catch(() => {});
       });
       // WebSockets bypass HTTP interception. Enforce exact origin policy before construction.
-      await page.exposeFunction("__tianshuBlockedOrigin", (origin: string) => blocked.add(origin));
+      await page.exposeFunction("__agentForemanBlockedOrigin", (origin: string) => blocked.add(origin));
       await page.evaluateOnNewDocument(
         (origins: string[]) => {
           const Original = globalThis.WebSocket;
@@ -143,9 +143,9 @@ export class VisualBrowser {
               if (!origins.includes(parsed.origin)) {
                 void (
                   globalThis as unknown as {
-                    __tianshuBlockedOrigin: (origin: string) => Promise<void>;
+                    __agentForemanBlockedOrigin: (origin: string) => Promise<void>;
                   }
-                ).__tianshuBlockedOrigin(parsed.origin);
+                ).__agentForemanBlockedOrigin(parsed.origin);
                 throw new Error("Visual resource policy blocked WebSocket origin");
               }
               super(url, protocols);

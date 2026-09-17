@@ -64,7 +64,7 @@ async function runVerify(
   projectPath: string,
   options: {
     checks: AcceptanceCheckDef[];
-    /** 项目级覆盖：写入 .tianshu-mcp/acceptance.json */
+    /** 项目级覆盖：写入 .agent-foreman/acceptance.json */
     projectConcurrency?: number;
     /** server 级：经 ServerConfig（config.json 同 schema） */
     serverConcurrency?: number;
@@ -72,9 +72,9 @@ async function runVerify(
   },
 ): Promise<RunOutcome> {
   if (options.projectConcurrency !== undefined) {
-    await fsp.mkdir(path.join(projectPath, ".tianshu-mcp"), { recursive: true });
+    await fsp.mkdir(path.join(projectPath, ".agent-foreman"), { recursive: true });
     await fsp.writeFile(
-      path.join(projectPath, ".tianshu-mcp", "acceptance.json"),
+      path.join(projectPath, ".agent-foreman", "acceptance.json"),
       JSON.stringify({
         checks: [],
         requireChanges: false,

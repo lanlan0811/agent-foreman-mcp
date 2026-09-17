@@ -21,13 +21,13 @@ async function fixture() {
   dirs.push(root);
   const project = path.join(root, "project"),
     home = path.join(root, "home");
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   const sharp = await loadSharp();
   await sharp({ create: { width: 2, height: 2, channels: 3, background: "red" } })
     .png()
     .toFile(path.join(project, "image.png"));
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify({
       checks: [],
       requireChanges: false,
@@ -119,7 +119,7 @@ function syntheticReport(result: Partial<VisualResult> & Pick<VisualResult, "sta
           repairable: false,
           content: {
             provider: "vision-cli",
-            expect: "蓝色齿轮与白色文字 TIANSHU",
+            expect: "蓝色齿轮与白色文字 AGENT_FOREMAN",
             cacheKey: "k".repeat(64),
             cached: false,
             votes: [
@@ -141,14 +141,14 @@ it("renders content check details in evidence markdown and offline HTML", () => 
   const report = syntheticReport({ id: "logo-elements", status: "uncertain", code: "CONTENT_UNCERTAIN" });
   const evidence = visualEvidence(report);
   expect(evidence).toContain("内容校验项默认为告警");
-  expect(evidence).toContain("期望描述：蓝色齿轮与白色文字 TIANSHU");
+  expect(evidence).toContain("期望描述：蓝色齿轮与白色文字 AGENT_FOREMAN");
   expect(evidence).toContain("2 次采样：1 通过 / 1 不通过 / 0 无效；置信度均值 0.65");
   expect(evidence).toContain("置信度闸门：命令未提供 confidence，minConfidence 未生效");
   expect(evidence).toContain("提供者命令：vision-cli；命中缓存：否");
   const html = visualHtml(report);
   expect(html).toContain('<option>uncertain</option>');
   expect(html).toContain('data-status="uncertain"');
-  expect(html).toContain("蓝色齿轮与白色文字 TIANSHU");
+  expect(html).toContain("蓝色齿轮与白色文字 AGENT_FOREMAN");
   expect(html).toContain("minConfidence did not apply");
   expect(html).toContain("<th>Sample</th>");
   // §5 B 组：summarizeReport 按 status 泛化输出，uncertain 正常显示（仅补断言，无逻辑改动）

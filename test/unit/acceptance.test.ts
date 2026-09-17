@@ -121,9 +121,9 @@ describe("验收 fail-closed", () => {
 
   it("requireChanges=false 时 git 仓库零变更仅提示不拦截", async () => {
     const project = await tmpDir("zero-changes-disabled");
-    await fsp.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+    await fsp.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
     await fsp.writeFile(
-      path.join(project, ".tianshu-mcp", "acceptance.json"),
+      path.join(project, ".agent-foreman", "acceptance.json"),
       JSON.stringify({ checks: [], requireChanges: false }),
       "utf8",
     );

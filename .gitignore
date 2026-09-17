@@ -4,15 +4,11 @@ AGENTS.md
 .codex/*
 .rivet/*
 
-# tianshu-mcp-web目录是开发tianshu-mcp官网的目录，进行开发mcp时请勿修改官网开发目录代码
-# 整目录忽略（含目录本身），防止 git add . 把内嵌 git 仓库再次当作 gitlink 提交
-tianshu-mcp-web/
-
 docs/zcode-issue-8-10-evidence/
 
 analysis-tools/*
 
-/.tianshu-mcp/*
+/.agent-foreman/*
 
 node_modules/*
 dist/*

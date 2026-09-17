@@ -1,7 +1,7 @@
 /**
  * AcceptanceEngine（开发计划 §8）：A. 自动命令检查 + B. 代码分析，
  * 产出 report.md + report.json，判定一轮验收通过/失败。
- * 配置优先级：extraChecks 参数 > 项目内 .tianshu-mcp/acceptance.json > projects.json 补录 > 默认集。
+ * 配置优先级：extraChecks 参数 > 项目内 .agent-foreman/acceptance.json > projects.json 补录 > 默认集。
  * 命令检查按 verifyConcurrency 有界并行（1=串行）；并行时每条 check 写独立 part 日志，
  * 结束后按声明顺序拼回同一份 verify-<round>.log（对外产物与串行一致）。
  */
@@ -153,7 +153,7 @@ export class AcceptanceEngine {
     if (!(mode === "replace" && hasExtra)) {
       if (inProject?.checks !== undefined) {
         notes.push(
-          `使用项目内验收配置 <project>/.tianshu-mcp/acceptance.json（${inProject.checks.length} 项）。`,
+          `使用项目内验收配置 <project>/.agent-foreman/acceptance.json（${inProject.checks.length} 项）。`,
         );
         out.push(...inProject.checks);
       } else if (req.projectVerify?.length) {

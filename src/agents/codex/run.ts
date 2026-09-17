@@ -356,7 +356,7 @@ export async function runCodexTask(args: RunCodexArgs): Promise<AgentRunResult> 
         ctx.resume?.kind === "continue"
           ? `continue:${createHash("sha256").update(ctx.resume.message ?? "confirmed").digest("hex").slice(0, 8)}`
           : (ctx.resume?.kind ?? "initial");
-      const marker = `【tianshu:${ctx.taskId}:r${ctx.round}:${attempt}】`;
+      const marker = `【agent-foreman:${ctx.taskId}:r${ctx.round}:${attempt}】`;
       const beforeText = (await cdp.poll()).conversationText;
 
       await cdp.typeText(marker + message);

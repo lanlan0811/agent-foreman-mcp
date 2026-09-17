@@ -329,11 +329,11 @@ export class TaskOrchestrator {
           continue;
         }
         if (maxRounds === 0) {
-          // 未开启自动返修：验收失败 → failed，天枢可手动 rework_task 或 verify_task 复查
+          // 未开启自动返修：验收失败 → failed，宿主可手动 rework_task 或 verify_task 复查
           const msg = `验收失败（第 ${round} 轮）。未开启自动返修。可用 rework_task(${meta.taskId}, feedback=失败摘要) 手动续修，或 get_task_report 查看报告后裁决。`;
           return this.finish("failed", "verify_failed", `${msg}\n\n${verdict.summary}`);
         }
-        // 自动返修轮次用尽 → needs_attention（待天枢裁决）
+        // 自动返修轮次用尽 → needs_attention（待宿主裁决）
         const msg = `验收失败，自动返修轮次已用尽（${meta.roundsUsed}/${maxRounds} 轮）。建议人工介入或调 rework_task 追加指示。`;
         meta.lastMessage = msg;
         await store.updateStatus(meta, "needs_attention", msg);

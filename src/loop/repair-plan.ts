@@ -146,7 +146,7 @@ export function renderRepairPlan(input: RepairPlanInput): string {
 
 /**
  * 写修复计划文件。
- * 文件名：`rework-<taskId>-r<round>.md`；落任务目录（必），并尝试落项目 `.tianshu-mcp/`。
+ * 文件名：`rework-<taskId>-r<round>.md`；落任务目录（必），并尝试落项目 `.agent-foreman/`。
  */
 export async function writeRepairPlan(input: RepairPlanInput): Promise<RepairPlanResult> {
   const fileName = `rework-${input.taskId}-r${input.round}.md`;

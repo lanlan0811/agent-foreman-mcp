@@ -11,7 +11,7 @@
  * 安全约束（fail-closed → 失败即回退到界面路径，绝不破坏用户状态）：
  *  - 仅在 Windows 且状态文件存在、可解析时生效；
  *  - **幂等**：已存在同路径登记则直接返回，不写文件；
- *  - 写入前**备份**（`.tianshu-mcp-backup.json`，只在不存在时创建，避免覆盖良好备份）；
+ *  - 写入前**备份**（`.agent-foreman-backup.json`，只在不存在时创建，避免覆盖良好备份）；
  *  - **原子写**（临时文件 + rename），只改 `local-projects` / `project-order` 两个键，
  *    其余键原样保留；
  *  - 只在**本 MCP 受管实例停止**时写入，避免运行中的 Codex 用内存态覆盖；
@@ -33,7 +33,7 @@ export function codexStatePath(): string {
 
 /** 备份文件路径（不覆盖已有备份） */
 export function codexStateBackupPath(): string {
-  return `${codexStatePath()}.tianshu-mcp-backup.json`;
+  return `${codexStatePath()}.agent-foreman-backup.json`;
 }
 
 interface LocalProjectEntry {
@@ -164,15 +164,15 @@ export async function ensureProjectRegistered(
 
   try {
     // 备份只在不存在时创建，保留最初的良好副本
-    const backup = `${stateFile}.tianshu-mcp-backup.json`;
+    const backup = `${stateFile}.agent-foreman-backup.json`;
     if (!fs.existsSync(backup)) fs.copyFileSync(stateFile, backup);
-    const tmp = `${stateFile}.tianshu-mcp-tmp`;
+    const tmp = `${stateFile}.agent-foreman-tmp`;
     fs.writeFileSync(tmp, JSON.stringify(state), "utf8");
     fs.renameSync(tmp, stateFile);
   } catch (e) {
     return { status: "skipped", message: `写入 Codex 状态失败：${e instanceof Error ? e.message : String(e)}` };
   }
 
-  logger.info(`[codex] 已登记项目到 Codex 列表：${name}（${id}）；备份：${stateFile}.tianshu-mcp-backup.json`);
+  logger.info(`[codex] 已登记项目到 Codex 列表：${name}（${id}）；备份：${stateFile}.agent-foreman-backup.json`);
   return { status: "performed", projectId: id, message: `已登记项目：${name}` };
 }

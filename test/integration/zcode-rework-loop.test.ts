@@ -37,14 +37,14 @@ const profile = AgentProfileSchema.parse({
 async function project(): Promise<string> {
   const dir = await makeTmpRoot("zcode-rework-project");
   cleanup.push(dir);
-  fs.mkdirSync(path.join(dir, ".tianshu-mcp"));
+  fs.mkdirSync(path.join(dir, ".agent-foreman"));
   fs.writeFileSync(
     path.join(dir, "check.mjs"),
     "import fs from 'node:fs'; if(!fs.existsSync('done.txt')||fs.readFileSync('done.txt','utf8').trim()!=='PASS')process.exit(1);",
     "utf8",
   );
   fs.writeFileSync(
-    path.join(dir, ".tianshu-mcp", "acceptance.json"),
+    path.join(dir, ".agent-foreman", "acceptance.json"),
     JSON.stringify({ checks: [{ name: "done", cmd: ["node", "check.mjs"] }] }),
     "utf8",
   );
@@ -150,7 +150,7 @@ describe("ZCode 自动验收返修", () => {
     expect(fs.existsSync(plan)).toBe(true);
     expect(h.adapter.calls[1]?.feedback).toContain(plan);
     expect(h.adapter.calls[1]?.feedback).toContain(h.store.reportMdPath(task.taskId, 0));
-    expect(fs.existsSync(path.join(dir, ".tianshu-mcp", path.basename(plan)))).toBe(false);
+    expect(fs.existsSync(path.join(dir, ".agent-foreman", path.basename(plan)))).toBe(false);
   });
 
   it("两轮自动返修耗尽后进入 needs_attention", async () => {

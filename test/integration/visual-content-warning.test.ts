@@ -23,13 +23,13 @@ async function run(mode: string): Promise<{ report: VerifyReport; passed: boolea
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "视觉 告警-home-"));
   dirs.push(project, home);
   await fs.mkdir(path.join(project, "assets"), { recursive: true });
-  await fs.mkdir(path.join(project, ".tianshu-mcp"), { recursive: true });
+  await fs.mkdir(path.join(project, ".agent-foreman"), { recursive: true });
   const sharp = await loadSharp();
   await sharp({ create: { width: 4, height: 4, channels: 3, background: "#3355aa" } })
     .png()
     .toFile(path.join(project, "assets", "logo.png"));
   await fs.writeFile(
-    path.join(project, ".tianshu-mcp", "acceptance.json"),
+    path.join(project, ".agent-foreman", "acceptance.json"),
     JSON.stringify({
       checks: [],
       requireChanges: false,
@@ -46,7 +46,7 @@ async function run(mode: string): Promise<{ report: VerifyReport; passed: boolea
           {
             id: "logo",
             files: ["assets/logo.png"],
-            expect: "blue gear with TIANSHU text",
+            expect: "blue gear with AGENT_FOREMAN text",
             blocking: false,
           },
         ],
@@ -57,7 +57,7 @@ async function run(mode: string): Promise<{ report: VerifyReport; passed: boolea
   const savedCounter = process.env.CONTENT_JUDGE_COUNTER;
   process.env.CONTENT_JUDGE_MODE = mode;
   // flip 模式按累计调用次数交替：计数文件让两次采样一正一反（平票）
-  process.env.CONTENT_JUDGE_COUNTER = path.join(project, ".tianshu-mcp", "judge-counter.txt");
+  process.env.CONTENT_JUDGE_COUNTER = path.join(project, ".agent-foreman", "judge-counter.txt");
   const logger = new Logger(null, "error");
   const store = new TaskStore(home, logger);
   const engine = new AcceptanceEngine(store, logger);

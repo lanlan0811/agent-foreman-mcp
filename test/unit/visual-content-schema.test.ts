@@ -11,7 +11,7 @@ const judge = {
 const valid = {
   enabled: true,
   content: judge,
-  contents: [{ id: "logo", files: ["assets/logo.png"], expect: "Blue gear with TIANSHU text" }],
+  contents: [{ id: "logo", files: ["assets/logo.png"], expect: "Blue gear with AGENT_FOREMAN text" }],
 };
 const staticSource = { type: "static" as const, root: "dist" };
 

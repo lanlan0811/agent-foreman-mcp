@@ -8,7 +8,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const THIS_DIR = path.dirname(fileURLToPath(import.meta.url));
-const SKILL_DIR = path.resolve(THIS_DIR, "../../skills/tianshu-mcp");
+const SKILL_DIR = path.resolve(THIS_DIR, "../../skills/agent-foreman-mcp");
 
 function readFrontmatter(file: string): Record<string, string> {
   let text = fs.readFileSync(path.join(SKILL_DIR, file), "utf8");
@@ -31,11 +31,11 @@ function readFrontmatter(file: string): Record<string, string> {
   return out;
 }
 
-describe("skills/tianshu-mcp/SKILL.md frontmatter", () => {
+describe("skills/agent-foreman-mcp/SKILL.md frontmatter", () => {
   const fm = readFrontmatter("SKILL.md");
 
-  it("name = tianshu-mcp", () => {
-    expect(fm["name"]).toBe("tianshu-mcp");
+  it("name = agent-foreman-mcp", () => {
+    expect(fm["name"]).toBe("agent-foreman-mcp");
   });
 
   it("description 存在、不以 [ 开头、无外层引号、字数合理", () => {
@@ -62,12 +62,12 @@ describe("skills/tianshu-mcp/SKILL.md frontmatter", () => {
   it("正文以强指令开头（首行即指令）", () => {
     const text = fs.readFileSync(path.join(SKILL_DIR, "SKILL.md"), "utf8");
     const body = text.split("---\n")[2] ?? "";
-    expect(body.trim().startsWith("# tianshu-mcp")).toBe(true);
+    expect(body.trim().startsWith("# agent-foreman-mcp")).toBe(true);
     expect(body).toContain("首行强指令");
   });
 });
 
-describe("skills/tianshu-mcp/usage-examples.md 存在且结构齐全", () => {
+describe("skills/agent-foreman-mcp/usage-examples.md 存在且结构齐全", () => {
   it("含任务书模板 / meta 解读 / 返修提示语模板", () => {
     const text = fs.readFileSync(path.join(SKILL_DIR, "usage-examples.md"), "utf8");
     expect(text).toContain("任务书模板");
