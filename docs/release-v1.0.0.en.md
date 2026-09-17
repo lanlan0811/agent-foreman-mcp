@@ -130,3 +130,23 @@ npx -y agent-foreman-mcp
 ```
 
 To connect your host, see the [Host Integration Guide](host-integration.en.md).
+
+---
+
+## 7. Release information
+
+| Item | Link |
+|---|---|
+| GitHub Release | <https://github.com/lanlan0811/agent-foreman-mcp/releases/tag/v1.0.0> |
+| npm | <https://www.npmjs.com/package/agent-foreman-mcp/v/1.0.0> |
+| Artifact | `agent-foreman-mcp-1.0.0.tgz` (attached to the Release page) |
+| Release commit | `1e56647` (tag `v1.0.0`) |
+| CI | three-platform build/test matrix + visual matrix + tarball content check all pass |
+
+Post-publish verification (measured):
+
+- `npm view agent-foreman-mcp version` → `1.0.0`;
+- `npx -y agent-foreman-mcp` launches and connects → handshake `serverInfo = {name: agent-foreman-mcp, version: 1.0.0}`, 11 tools listed, `get_profiles` returns the text meta block plus `structuredContent`, and stdout carries no non-protocol output;
+- The old package `tianshu-mcp` remains at `0.5.4` (not published, not deprecated).
+
+> **First-release note**: `v1.0.0` is this repository's first tag, so the Release's Full Changelog falls back to a `commits/v1.0.0` link (no previous version to compare against); from v1.0.1 onward it returns to the `compare/v1.0.0...v1.0.1` form.

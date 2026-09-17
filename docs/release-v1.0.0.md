@@ -130,3 +130,23 @@ npx -y agent-foreman-mcp
 ```
 
 接入你的宿主：见 [宿主接入指南](host-integration.md)。
+
+---
+
+## 七、发布信息
+
+| 项 | 链接 |
+|---|---|
+| GitHub Release | <https://github.com/lanlan0811/agent-foreman-mcp/releases/tag/v1.0.0> |
+| npm | <https://www.npmjs.com/package/agent-foreman-mcp/v/1.0.0> |
+| 发布产物 | `agent-foreman-mcp-1.0.0.tgz`（附于 Release 页） |
+| 发布提交 | `1e56647`（tag `v1.0.0`） |
+| CI | 三平台构建测试矩阵 + 视觉矩阵 + tarball 内容检查全部通过 |
+
+发布后核验（实测）：
+
+- `npm view agent-foreman-mcp version` → `1.0.0`；
+- `npx -y agent-foreman-mcp` 拉起连通 → 握手 `serverInfo = {name: agent-foreman-mcp, version: 1.0.0}`，列出 11 个工具，`get_profiles` 返回文本 meta 块 + `structuredContent`，stdout 无非协议内容；
+- 旧包 `tianshu-mcp` 仍为 `0.5.4`（未发布、未 deprecate）。
+
+> **首次发版说明**：`v1.0.0` 是本仓库首个 tag，故 Release 的 Full Changelog 回退为 `commits/v1.0.0` 链接（无上一版本可比较）；自 v1.0.1 起恢复 `compare/v1.0.0...v1.0.1` 形式。
