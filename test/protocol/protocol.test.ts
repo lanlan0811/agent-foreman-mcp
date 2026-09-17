@@ -1,10 +1,11 @@
 /**
  * 协议级测试：官方 SDK client 连接 in-memory transport 后的 server。
- * 断言 9 个工具可见、调用返回格式（文本 + meta 块 / 参数校验错误）。
+ * 断言 11 个工具可见、调用返回格式（文本 + meta 块 + structuredContent 双轨 / 参数校验错误）。
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { startTestServer, callTool, parseMeta, rmrf, type TestServer } from "../test-utils.js";
 import { TOOL_DEFS } from "../../src/mcp/tools.js";
+import { META_BLOCK_FIELDS } from "../../src/mcp/formatter.js";
 import pkg from "../../package.json" with { type: "json" };
 
 let ts: TestServer;
@@ -133,5 +134,63 @@ describe("工具面", () => {
       arguments: { projectPath: "D:/__definitely_not_exists__/x", task: "xx" },
     });
     expect(res.isError).toBe(true);
+  });
+});
+
+describe("双轨返回契约（D7/M2：文本 + meta 块 + structuredContent）", () => {
+  it("成功路径：文本含 meta 块，且 structuredContent 与 meta 同源", async () => {
+    const { res, text } = await callTool(ts.client, "get_profiles", {});
+    const { meta } = parseMeta(text);
+    expect(meta).not.toBeNull();
+    // 三要素之一：structuredContent 存在
+    const sc = (res as { structuredContent?: Record<string, unknown> }).structuredContent;
+    expect(sc, "成功路径必须返回 structuredContent").toBeDefined();
+    // 同一 meta 对象双投递（单一事实来源）：字段逐一相等
+    expect(sc).toEqual(meta);
+  });
+
+  it("错误路径：文本报错，且 structuredContent 至少含 ok:false 与 message", async () => {
+    const { res, text } = await callTool(ts.client, "get_task_report", { taskId: "tsk_not_exist" });
+    expect(res.isError).toBe(true);
+    expect(text).toMatch(/Error:/);
+    const sc = (res as { structuredContent?: Record<string, unknown> }).structuredContent;
+    expect(sc, "错误路径同样必须返回 structuredContent").toBeDefined();
+    expect(sc!.ok).toBe(false);
+    expect(typeof sc!.message).toBe("string");
+    expect(sc!.message).toBeTruthy();
+  });
+
+  it("handler 抛异常（server 层 catch 直返）也具备 structuredContent", async () => {
+    // 用 schema 合法的参数触发 handler 内部异常（realpath 失败），走 server.ts 的 catch 分支。
+    // 注意区分：**schema 级**非法参数由 SDK 在协议层拦截（JSON-RPC -32602，属协议错误，
+    // 协议上不可能携带 structuredContent）；此处覆盖的是我们自己的 catch 错误路径。
+    const res = await ts.client.callTool({
+      name: "prepare_visual_baseline",
+      arguments: { projectPath: "D:/__definitely_not_exists__/xyz" },
+    });
+    expect(res.isError).toBe(true);
+    const sc = (res as { structuredContent?: Record<string, unknown> }).structuredContent;
+    expect(sc, "server.ts catch 分支必须提供 structuredContent").toBeDefined();
+    expect(sc!.ok).toBe(false);
+    expect(typeof sc!.message).toBe("string");
+    expect(sc!.message).toBeTruthy();
+  });
+
+  it("structuredContent 字段名契约：meta 块字段落在声明的稳定清单内（防改名）", async () => {
+    const { text } = await callTool(ts.client, "get_profiles", {});
+    const { meta } = parseMeta(text);
+    expect(meta).not.toBeNull();
+    const known = new Set<string>(META_BLOCK_FIELDS);
+    const unknown = Object.keys(meta!).filter((k) => !known.has(k));
+    // 新增字段必须同步登记进 META_BLOCK_FIELDS（顶层稳定、字段只增不改不换名）
+    expect(unknown, `未登记的 meta 字段（请同步 META_BLOCK_FIELDS）: ${unknown.join(", ")}`).toEqual([]);
+  });
+
+  it("工具声明了 outputSchema（现代宿主可据此消费结构化返回）", async () => {
+    const res = await ts.client.listTools();
+    for (const tool of res.tools) {
+      expect(tool.outputSchema, `工具 ${tool.name} 应声明 outputSchema`).toBeDefined();
+      expect(typeof tool.outputSchema).toBe("object");
+    }
   });
 });

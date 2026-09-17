@@ -13,6 +13,7 @@ import { TaskManager } from "./tasks/task-manager.js";
 import { makeBuildCtx } from "./mcp/context.js";
 import { makeHandlers, type AppContext } from "./mcp/handlers.js";
 import { TOOL_DEFS } from "./mcp/tools.js";
+import { errorResult, TOOL_OUTPUT_SHAPE } from "./mcp/formatter.js";
 import type { Logger } from "./util/log.js";
 import { Logger as LoggerCtor } from "./util/log.js";
 import { skillSelfInstall } from "./util/skill-install.js";
@@ -91,6 +92,8 @@ export async function buildServer(
         title: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
+        // 双轨返回（D7）：声明宽松 outputSchema，客户端可按其消费 structuredContent
+        outputSchema: TOOL_OUTPUT_SHAPE,
         _meta: { requireApproval: tool.requireApproval, capability: tool.capability },
         annotations: {
           readOnlyHint: tool.capability === "read",
@@ -109,15 +112,13 @@ export async function buildServer(
             const detail = parsed.error.issues
               .map((i) => `${i.path.join(".")}: ${i.message}`)
               .join("; ");
-            return {
-              content: [{ type: "text" as const, text: `Error: 参数不合法 — ${detail}` }],
-              isError: true,
-            };
+            // 经统一 errorResult：错误路径同样提供 structuredContent（双轨契约，M2）
+            return errorResult(`参数不合法 — ${detail}`);
           }
           return await handler(parsed.data as Record<string, unknown>);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          return { content: [{ type: "text" as const, text: `Error: ${msg}` }], isError: true };
+          return errorResult(msg);
         }
       },
     );

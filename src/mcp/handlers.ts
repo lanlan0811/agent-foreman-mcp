@@ -77,24 +77,26 @@ export interface Defaults {
 
 export function makeHandlers(ctx: AppContext, defaults: Defaults) {
   return {
-    prepare_visual_baseline: async (args: Record<string, unknown>) =>
-      textResult(
-        JSON.stringify(
-          await ctx.engine.runVisualOperation((signal) =>
-            prepareBaseline(ctx.dataHome.dir, PrepareBaselineSchema.parse(args), signal),
-          ),
-          null,
-          2,
-        ),
-      ),
-    approve_visual_baseline: async (args: Record<string, unknown>) =>
-      textResult(
-        JSON.stringify(
-          await approveBaseline(ctx.dataHome.dir, ApproveBaselineSchema.parse(args)),
-          null,
-          2,
-        ),
-      ),
+    // 视觉基准工具返回任意结果对象（非 MetaBlockFields 形状）：文本为缩进 JSON，
+    // structuredContent 用统一信封 { ok, message, result }（操作只执行一次）。
+    prepare_visual_baseline: async (args: Record<string, unknown>) => {
+      const result = await ctx.engine.runVisualOperation((signal) =>
+        prepareBaseline(ctx.dataHome.dir, PrepareBaselineSchema.parse(args), signal),
+      );
+      return textResult(JSON.stringify(result, null, 2), false, {
+        ok: true,
+        message: "视觉基准候选已准备",
+        result,
+      });
+    },
+    approve_visual_baseline: async (args: Record<string, unknown>) => {
+      const result = await approveBaseline(ctx.dataHome.dir, ApproveBaselineSchema.parse(args));
+      return textResult(JSON.stringify(result, null, 2), false, {
+        ok: true,
+        message: "视觉基准已批准",
+        result,
+      });
+    },
     run_task: runTaskHandler(ctx, defaults),
     query_task: queryTaskHandler(ctx),
     list_tasks: listTasksHandler(ctx),
@@ -415,7 +417,14 @@ function getReportHandler(ctx: AppContext): Handler {
     const mdPath = store.reportMdPath(args.taskId, round);
     const text = await readTextSafe(mdPath);
     if (text == null) return errorResult(`第 ${round} 轮验收报告不存在（${mdPath}）。`);
-    return textResult(text);
+    // get_task_report 返回报告 Markdown 原文（不含 meta 块），结构化返回给出定位信息
+    return textResult(text, false, {
+      ok: true,
+      taskId: args.taskId,
+      reportRound: round,
+      reportFiles: { md: mdPath, json: store.reportJsonPath(args.taskId, round) },
+      message: `第 ${round} 轮验收报告`,
+    });
   };
 }
 
