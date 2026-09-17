@@ -1,0 +1,702 @@
+# 更新日志（CHANGELOG）
+
+本文件记录 `tianshu-mcp` 的所有重要变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
+版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+英文版：[CHANGELOG.en.md](CHANGELOG.en.md)
+
+---
+
+## [未发布]
+
+### 计划中
+
+- 更多外部 AI-Agent 适配（新 agent = 一个 profile +（如需）一个 adapter 文件）。
+- TraeWork 在 macOS 下的可执行探测与原生对话框驱动（当前 macOS 分支 fail-closed）。
+- 可选的项目级技能播种（默认不写入目标项目仓库）。
+- Codex 与 ZCode GUI 的 macOS 取消/返修/新建项目矩阵（当前两者 darwin 均保持 `research`）。
+- `needs_user` 状态下取消任务时经临时 CDP 连接尽力停止 GUI 内等待中的会话。
+- ZCode 无项目派发在 macOS 上的真机验证（本轮仅 Windows 10 实测）。
+- ZCode **未登记项目**的自动导入在 Windows 上无法完成：原生面板脚本靠 `SetForegroundWindow` 抢前台来激活地址栏，而后台 MCP server 的子进程会被 Windows 拒绝，地址栏 Edit 永不出现，脚本空转到 deadline（实测 56s 后由 `budget.check()` 归类为 setup 预算耗尽）；且 PowerShell 的 stdout 在管道里被缓冲、进程被 kill 后缓冲丢失，日志里连一条 `native:` 阶段都看不到，排障方向被误导。临时对策：先在 ZCode 中手动把目标目录加入项目列表；修复方向是脚本内改用 `AttachThreadInput` 抢前台（或改走 ZCode 受支持的登记入口）。
+- AI 内容校验的跨轮判定翻转熔断（本轮以缓存 + 采样覆盖；若真机数据显示仍扰动再议）、跨任务缓存共享、参考图/设计稿差异比对。
+
+### 修复
+
+- **补齐 issue #13 计划 §5 G 要求的两项契约映射断言（v0.5.4 发布后补）**：`CONTENT_TIMEOUT` 此前只实现了分类逻辑、测试仅断言传输层 `outcome.timeout`，判定桩的 `sleep` 模式从未被用例使用；现补 `visual-content-command` 的端到端断言（超时 → 单项 `blocked` + `CONTENT_TIMEOUT` + 仍为仅告警 + 临时输入文件已删除），并补成功路径的临时输入删除断言，以及 `visual doctor` 的「多规则总预算超 `roundTimeoutMs` 只给建议值」分支断言。v0.5.4 tag（`ea797d1`）的用例数为 644，master 现为 647。
+
+---
+
+## [0.5.4] — 2026-09-16
+
+**视觉验收第二阶段：AI 视觉内容校验（issue #13）**——在既有客观像素/规格检查之外，新增一个**可选、默认关闭**的内容校验维度：校验图片或页面截图的内容是否符合用户显式声明的期望描述。判定完全委托用户自备的本地命令（MCP 全程不读取/存储/转发任何凭证），默认仅告警，采样多数票 + 任务级缓存防抖。完整说明见 [v0.5.4 发布说明](docs/release-v0.5.4.md)。
+
+### 新增
+
+- **内容校验配置面**：`visual.content`（全局命令与预算）、`visual.contents[]`（图片内容规则）、`pages[].content`（页面语义校验）与 `pages[].pixel`（默认 `true`；`false` 表示语义-only 页面，豁免基准要求与像素对比，但必须声明 `content`）。配置默认关闭，需显式启用；声明了规则却不启用、有效命令/模板缺失、未知占位符、未放行 `allowRemote` 却使用字节外传占位符、`samples × timeoutMs` 超出 `limits.roundTimeoutMs`、派生 id 冲突等一律在 schema 层拒绝。
+- **命令契约**：占位符模板（`<image:path>` / `<expect:file>` / `<image:base64:file>`）+ stdout 末行严格 JSON（`{passed, confidence?, reason}`）。期望文本经临时文件传递，规避命令行转义与长度上限，也避免进入进程命令行与系统审计日志；临时文件每轮采样后在 `finally` 中删除。逐规则可覆盖 `command`/`argsTemplate`/`cwd`/`env`/`samples`/`allowRemote`。
+- **判定防抖**：单项内串行采样 + 多数票（票不集中判 `uncertain`）+ 可选置信度闸门（`minConfidence`）；任务目录级输入哈希缓存，键含图片摘要、期望文本、命令字符串、**命令绝对路径与二进制摘要**、参数模板、cwd、环境值摘要（不落明文）、`allowRemote`、`samples`、`minConfidence`。自备 CLI 升级即自动失效；命令身份无法可靠计算时不做缓存；仅成功完成的判定入缓存。
+- **结果与报告**：`VisualResult.kind` 新增 `"content"`、`status` 新增 `"uncertain"`；内容项在报告 md 与离线 HTML 中输出期望描述、采样票型、判定理由、提供者命令与缓存命中，并在命令不报 confidence 时标注「minConfidence 未生效」。HTML 状态筛选新增 `uncertain` 档位。
+- **CLI 与诊断**：`visual content probe <project> [ruleId]`（按声明规则跑真实判定但不写证据、不写缓存）、`visual content cache clear <taskId>`；`visual doctor` 新增 `content command`（逐条有效命令解析结果 + `allowRemote` 声明清单，不可解析即该项失败）与 `content budget`（规则数 × samples × timeoutMs 与 `roundTimeoutMs` 对比并给建议值，不自动改配置）。
+
+### 修复
+
+- **返修计划把 `optional:true` 的失败列为「必须修复」**（issue #13 验收标准要求修复的既有缺陷）：`repair-plan.ts` 的 `failed` 过滤条件原先只排除 `skipped`，导致仅告警的检查失败也被列进第 2 节。现补 `!c.optional`，并新增第 3.2 节「仅告警项（不必修复）」列出 optional 检查失败与 `optional:true`/`uncertain` 的视觉项，同时在第 5 节明确要求不得为消除告警而伪造产物或放宽检查。
+
+### 安全
+
+- [SECURITY.md](SECURITY.md) / [SECURITY.en.md](SECURITY.en.md) 的「凭证零管理」小节增补内容校验的边界：判定委托用户声明的本地命令，MCP 不读取/存储/转发凭证；图片是否离开本机取决于该命令；**MCP 的强制力仅在契约层**（未放行 `allowRemote` 时禁用字节外传占位符），无法在系统层阻止用户命令外传，需用户自行确认其命令行为。
+
+### 测试
+
+- 全量 **644 passed / 12 skipped**（Windows 10 x64，Node 24.18.0），较 v0.5.3 净增 112 项用例：schema 10 条校验正反用例（含预算自洽反例）、`tallyContentVotes` 穷举、缓存键稳定性与命令升级失效、占位符展开与 stdout 解析、整轮级阻塞不产结果行（全局命令与逐规则覆盖命令各一）、单项失败仅告警可见、返修计划隔离、缓存零重跑、探测与缓存清理、doctor 内容诊断、判定归口回归（`uncertain` 与 `optional:true` 均不致败、`blocking:true` 才致败），以及语义-only 页面冻结摘要显式记 null（不受残留基准文件影响）。
+- 12 项真实浏览器门禁用例在 Windows 10 本机以 `TIANSHU_VISUAL_BROWSER_TEST=1` 跑通 **12/12**，其中新增 2 项覆盖 `pixel:false` 语义页豁免基准与「一次截图产出像素 + 内容两项」。
+- macOS 真实系统证据由 CI 采集：目标提交的 `CI` 工作流 22 个作业全绿，其中 6 个 `visual-browser` 作业覆盖 macOS 15（Apple Silicon arm64）与 macOS 15 Intel（x64）× Node 20/22/24。
+- 未覆盖项如实标注：未与真实三方视觉 CLI 实测；「图片未离开本机」无法在系统层验证。详见 [验证进度](docs/visual-validation.md)。
+
+### 兼容性
+
+- 本版本为 **PATCH**：新增可选能力且**默认关闭**，既有调用方签名、报告字段与 `pages`/`images` 默认行为**向后兼容**。唯一需要消费方注意的是枚举扩展——`VisualResult.status` 新增 `"uncertain"`、`kind` 新增 `"content"`，严格穷举 `status` 的外部消费方需一并处理。
+
+---
+
+## [0.5.3] — 2026-09-15
+
+**ZCode 真机回访修复（issue #12 第二轮）**：修复 Windows 上 GUI 实例无法跨 server 退出驻留、新建任务不切页导致静默空等、发送失败归因误导三个真机缺陷。完整说明见 [v0.5.3 发布说明](docs/release-v0.5.3.md)，真机证据见 [Windows 10 验收记录](docs/zcode-issue-12-windows-evidence.md)。
+
+### 修复
+
+- **ZCode / Codex 桌面实例在 Windows 上无法跨 server 退出驻留（真机发现）**：`zcode`、`codex` 的 GUI 实例此前按平台分支 spawn（`detached: process.platform !== "win32"`），而 `traework` 用的是无条件 `detached: true`。最小实验（Windows 10 / Node 24.18.0）显示同一段 spawn：non-detached 子进程在父进程退出后存活 0，detached 存活 1。因此 Windows 上 MCP server（或一次性 smoke / probe 脚本）一退出，ZCode 就被连坐杀掉，`keptInstance` 的「实例跨 server 退出驻留」形同虚设——`needs_user` 提示「请在 ZCode 中处理后再调用 continue_task」，而窗口其实已经消失。现把该不变量收敛为单一来源 `guiInstanceSpawnOptions()`，三处 GUI 实例共用（`codex` 原先连 `unref()` 都带平台分支，一并去掉）；`verify/runner`、`visual/services`、`agents/spawn` 这些**需要整组终止**的执行型子进程语义相反，继续按平台分支，不受影响。
+- **新建任务点击返回成功但页面不切换，后续一路静默空等（真机发现）**：ZCode 停在已有会话时，顶部 `conversation-new-task` 是惰性挂载的图标——点击派发成功（返回 `true`）却不切换页面，而会话页的 composer **不挂载** `composer-workspace-trigger`。于是无项目模式的 default 确认、有项目模式的绑定等待都会空等到截止时间，最后只报一句 `needs_user/setup_recovery`（实测空转 30 秒）。现在新建任务后以「项目触发器已挂载」验证草稿**真的**建立；未建立则回退侧栏 `task-new-button`（Windows 3.11.2 实测可靠，此前该兜底只覆盖有项目模式），两者都失败才以 `setup_failed` fail-closed 并报出「触发器仍未挂载」。
+- **发送失败归因误导（真机发现）**：窗口被最小化或完全遮挡时页面被 Chromium 节流（`visibilityState=hidden`），发送按钮「明明在视口内」却点不到，`elementFromPoint` 命中的也不是按钮本身。旧文案只报「ZCode 发送按钮未在观察期内启用或被遮挡」，会把用户引向按钮；现在会识别该状态并报出「ZCode 窗口当前不在前台」及把窗口置于前台的操作指引。`Page.bringToFront` 经真机实测**无法**恢复被遮挡的 Electron 窗口，因此不假装能自动恢复。
+
+### 测试
+
+- 全量 **532 passed / 10 skipped**（Windows 10 x64，Node 24.18.0），较 v0.5.2 净增 7 项用例——草稿未建立时回退侧栏入口并完成派发、两个入口都建立不了草稿时 fail-closed 且不发送、页面被节流时发送失败归因为窗口不在前台、页面可见时保留原有的按钮归因文案，以及 GUI 实例 spawn 不变量（跨平台无条件 detached + unref）的 2 项回归。
+
+### 文档
+
+- [issue #12 Windows 10 真机验收记录](docs/zcode-issue-12-windows-evidence.md) 追加「第二轮回访（v0.5.2 之后）」：6 次真机运行的结果与现场取证、`newTask` 不切页的复现判据、发送阶段各失败面的证据，以及本轮**未复现 / 未验证**的事实（含第 1 次 `send_unknown` 的真因仍未定、`sendMessage` 诊断文案在真机上未走到）。
+
+---
+
+## [0.5.2] — 2026-09-14
+
+**ZCode 无项目派发（issue #12）**：`run_task` 的 `projectPath` 变为可选，ZCode 在 `default` 工作区承接任务；配套 `allowCreateProject` 可禁止自动导入项目。完整说明见 [v0.5.2 发布说明](docs/release-v0.5.2.md)，真机证据见 [Windows 10 验收记录](docs/zcode-issue-12-windows-evidence.md)。
+
+### 新增
+
+- **ZCode 无项目派发（issue #12）**：`run_task` 的 `projectPath` 改为可选。省略时 ZCode 在 `default` 工作区承接任务——不分配目录、不登记/导入项目、不采集 Git 基线、不冻结项目快照、不进入项目锁与项目验收；成功后以结构化字段标注 `not_applicable: no_project`，终态文案明示「未进行项目验收」。`query_task` / `list_tasks` 正常展示该类任务；`verify_task` / `get_task_report` 返回明确的不适用说明，不从 cwd 推导目录。
+- **`allowCreateProject`（ZCode 专用，可选布尔）**：省略 = 保持既有「目标未登记即自动导入」行为；显式 `false` 时，目标目录未登记即在**任何导入副作用之前**停止派发，返回可识别的 `project_not_registered` 与处理说明（不打开原生文件夹对话框、不添加项目）。其他 agent 显式传入该参数会得到明确的「不支持」错误，而不是被静默忽略。
+- **Windows 10 真机验收记录**（`docs/zcode-issue-12-windows-evidence{,.en}.md`）：ZCode 3.11.2.6792 上无项目派发与 `allowCreateProject=false` 的完整证据，含「派发前后 ZCode 项目条目 34 → 34、新增 0 / 消失 0」的对比。
+
+### 修复
+
+- **ZCode 项目触发器就绪判据不一致（issue #12 §五）**：等待用的是 `exists`（只看元素宽高），点击走的是 `pick`（要求该优先级层恰好一个未被裁剪的可见节点），两者判据不同，因此存在 `exists=true` 但 `click=false` 的窗口。现在等待与点击**共用同一份结构化探测**，区分未挂载 / 已挂载但不可见或被裁剪 / 不唯一 / 禁用 / 被遮挡 / 就绪；并新增点击后置检查——项目菜单必须真正打开，`menu-not-open` 单独归类。
+- **错误信息与行为失实**：「等待项目触发器超时」不再被用来描述早退（多匹配、禁用）或菜单未打开；失败文案携带 `selector`、匹配数与命中节点最小属性，诊断日志记录尝试次数、实际耗时与剩余预算。
+- **集中超时**：新增 `gui.projectTriggerTimeoutMs`（默认 15s）替换原先写死的两处 `15_000`；整个「等待 → 回退一次侧栏新建任务 → 再等待」共享同一截止时间，重试不重置预算，并被 setup 恢复预算与任务总时限夹住。
+- **`projectPath` 未在 MCP schema 层放开（真机发现）**：handler 已支持无项目分支，但 `RunTaskParamsSchema.projectPath` 仍是必填，真实 `run_task` 会在协议层被 SDK 拒成 `-32602 Required at projectPath`；而单元测试直接调 handler、绕过了 `inputSchema`，所以全绿也没抓到。已改为 `AbsPath.optional()`，并在 `test/integration/task-flow.test.ts` 补协议层回归用例（断言文本不出现 `-32602` / `Input validation error`）。
+- **缺少「不在项目中工作」切换，且项目菜单已开时点击被 toggle 反噬（真机发现）**：ZCode「新建任务」会继承上一次绑定，使无项目派发永久停在 `needs_user`；同时 `clickProjectTriggerAndConfirm` 在项目菜单**已经打开**时仍点击触发器，把 Radix 下拉关掉后一路轮询到 deadline，误报「项目菜单未打开」。现新增 `workOutsideProject` 选择器与 `enterDefaultWorkspace()` 显式切换（切换后以 `workspaceBinding` 回读为准），点击前先查菜单是否已开；`confirmDefaultWorkspace` 对「明确绑定着项目」立即返回而非空等。
+
+---
+
+## [0.5.1] — 2026-09-14
+
+文档与验证证据补齐；**无运行时行为变更**。完整说明见 [v0.5.1 发布说明](docs/release-v0.5.1.md)。
+
+### 新增
+
+- `npm run evidence:visual:windows`（`scripts/evidence-visual-windows.mjs`）：在 Windows 10 本机采集完整功能矩阵证据（`existing`/静态/命令三种来源、端口冲突阻塞且不结束他人服务、就绪失败有界阻塞并清理子进程、本机 Edge 独立实例与版本不匹配、缺浏览器阻塞），9/9 通过。
+- `docs/visual-validation-evidence/`：视觉验收验证的原始机器可读记录（Windows 10 矩阵 JSON 与测试输出、macOS 双架构 `environment.json`、macOS CI 摘要），随包分发。
+
+### 修复
+
+- `package-lock.json` 根包版本滞后：v0.5.0 发布时锁文件仍为 `0.4.1`（与 `package.json` 的 `0.5.0` 不一致），本版本同步为 `0.5.1`。
+
+### 测试
+
+- 视觉验收补两条真实浏览器门禁用例：项目路径含中文与空格时截图正常；主文档 302 跳转到未放行来源时按策略拦截，显式放行后通过。全量测试 **486 passed / 10 skipped**。
+- 采集 macOS 13+ 平台证据：macOS 15 真机 runner 上 Intel x64 与 Apple Silicon arm64（Node 20/22/24）各跑通 10 文件 51 用例。
+
+### 文档
+
+- **技能文档（`skills/tianshu-mcp/`）对齐代码实况**：`SKILL.md` 补全 11 个工具表与能力/审批列（含 `prepare_visual_baseline`/`approve_visual_baseline`），视觉验收独立成节（阻塞不触发返修、`rework_task` 先重新验收、基准审批与冻结），错误码表补 `setup_recovery` 与 `errorType` 取值，修正 agent 状态语义（`traework` 恒为 `ready`、`codex` 平台相关）与 `continue_task` 仅支持 codex/zcode；`usage-examples.md` 修正 `get_task_report` 不带 meta 块、移除 meta 表误列的 `reasoningLevel`、按 agent 区分自动修复计划落盘位置（codex 在项目内 `.zcode/plans/`、其余在任务目录），并补 `list_tasks` 实际输出列与视觉 CLI 命令。
+- `docs/visual-validation{,.en}.md` 重写为完整平台证据表（系统、Node、浏览器版本、命令、结果）。
+- 双语 README 与 HANDOFF 按当前代码与提交历史更新。
+
+---
+
+## [0.5.0] — 2026-09-14
+
+新增**可选视觉验收模块**：把页面截图对比与静态图片规格检查接入「开发 → 验收 → 返修 → 再验收」闭环。未启用视觉的项目行为兼容；旧报告与旧任务快照仍可读取。完整说明见 [v0.5.0 发布说明](docs/release-v0.5.0.md)。
+
+### 新增
+
+- **页面来源**：互斥的 `existing` / `command` / `static` 三种来源；服务按定义在同轮复用；静态托管拒绝目录穿越与项目外符号链接；端口占用即阻塞，不擅自复用或结束其他服务。
+- **截图与交互**：`viewport` / `fullPage` / `element` 模式与声明式 `click` / `input` / `hover` / `scroll` / `wait` 步骤；固定就绪流程（隔离上下文、登录态、字体与图片、关闭动画、屏蔽、采样）；支持整页有界滚动触发懒加载。
+- **稳定化与屏蔽**：最多 3 次采样取相邻一致；持续变化、超像素预算或无法稳定即阻塞；屏蔽选择器定位失败或全图屏蔽都不通过。
+- **像素对比**：统一 PNG；尺寸不一致直接失败不缩放；屏蔽区域不计入分子分母；pixelmatch 抗锯齿默认排除；连通区域分析输出坐标、面积、标注图，最多保留 100 个区域并记录其余数量与整体包围框。
+- **静态图片规格**：显式文件列表；编码格式与扩展名一致性、存在非空且完整解码、EXIF 方向归一后的宽高、宽高比、字节数、可选 DPI 与真实透明像素判定；不支持格式明确报告。
+- **基准两阶段**：`prepare` 生成候选（候选 ID、摘要、目标路径、预览），`approve` 核对候选/原基准/配置摘要后原子写入正式基准与 manifest；缺基准只能生成候选、不能判视觉通过；自动返修不调用批准入口。
+- **规则冻结**：任务动工前保存视觉配置与基准摘要，每轮前后核对；变化需经独立 `rules review` / `rules approve` 重建快照。
+- **MCP 工具**：新增 `prepare_visual_baseline`、`approve_visual_baseline`（均为有副作用、需宿主审批的 `write` 操作）。
+- **CLI**：新增 `tianshu-mcp visual` 子命令（`init`、`browser install`、`doctor`、`baseline prepare/approve`、`rules review/approve`、`artifacts clean`），在 stdio 连接前分流。
+- **报告与产物**：`VerifyReport` 新增可选 `visual` 字段与 `files.html`；离线 HTML 支持状态过滤、图片并排、透明叠加与区域定位，纯本地产物、文本转义、无 CDN；每轮产物位于 `<home>/tasks/<taskId>/visual/<round>/`，轮次由统一任务级锁分配。
+- **阻塞与恢复**：区分可返修缺陷、环境阻塞与用户取消；视觉阻塞进 `needs_attention` 并保留待重新验收标记；`rework_task` 对视觉阻塞先重新验收、仅真实缺陷才消耗返修预算；通用与 Codex 专用返修计划均含视觉证据并明示不得修改基准/阈值/开关绕过。
+- **配置健壮性**：无效 acceptance 配置显式阻塞而非静默回退；显式 `checks: []` 才关闭命令检查；`extraChecks` 与 `checksMode=replace` 不覆盖视觉门禁；`visual` 严格校验未知字段、重复 ID、空规则与冲突选项。
+- **依赖与运行时**：固定 `puppeteer-core@24.43.1`、`@puppeteer/browsers@2.13.2`、`sharp@0.34.5`、`pixelmatch@7.2.0`；图像库为可选动态依赖，缺失不阻止启动；浏览器按需显式安装，npm 安装与 MCP 启动均不下载浏览器；视觉模块要求 Node.js >=20.3，非视觉功能保留 >=20。
+- **文档与门禁**：新增双语视觉验收指南与验证进度；CI 新增真实浏览器矩阵（ubuntu/windows/macos-intel/macos × Node 20/22/24）与生产包消费者验收；release 要求目标提交存在成功 CI 且缺少镜像凭据时阻塞。
+
+### 修复
+
+- 验收引擎解析到无效项目配置时不再静默回退默认检查，改为显式阻塞并给出原因。
+- 手动验收与自动验收统一使用任务级锁分配报告轮次，避免并发或恢复覆盖历史证据。
+- 手动验收遇到视觉阻塞时任务落 `needs_attention`，不再误记 `failed`。
+- `rework_task` 允许对视觉阻塞但缺少原会话定位的任务先重新验收，不再直接拒绝。
+- ZCode 恢复预算在取消/截止时间到达时先确定原因再中止依赖操作，避免原因被下游 abort 监听覆盖。
+- `TaskOrchestrator` 启动阶段遇到视觉完整性问题时区分「被取消」与「阻塞」，取消不再误记为 `needs_attention`。
+
+### 测试
+
+- 全量 **486 passed / 8 skipped**（Windows 10 x64，Node 24.18.0）：新增视觉配置、图片规格、报告、基准、缓冲、快照、服务、真实浏览器捕获、流程与返修用例。
+- 8 项真实浏览器门禁用例以 `TIANSHU_VISUAL_BROWSER_TEST=1` 单独跑通；生产 tarball 独立消费者视觉冒烟通过。
+
+---
+
+## [0.4.1] — 2026-09-13
+
+文档版本：把编排技能文档对齐 v0.4.0 实际工具面，并补齐开源仓库的贡献者名录。本版本无代码行为变更。
+
+### 文档
+
+- **技能文档全面对齐 v0.4.0 工具面**（`skills/tianshu-mcp/`，server 启动时幂等同步到 `~/.rivet/skills/tianshu-mcp/`）：
+  - `SKILL.md` 新增 **projectPath 安全闸门**说明（绝对路径 + 存在目录 + realpath 归一、主目录与系统根目录拒绝、脏仓警示），避免把基础设施拒绝误判为 agent 失败。
+  - `SKILL.md` 新增 **硬失败错误码速查**（`setup_failed`/`project_ambiguous`/`project_mismatch`/`model_unavailable`/`model_mismatch`/`permission_unknown`/`cdp_disconnected`/`instance_busy`/`session_lost`/`input_mismatch`/`send_unknown`/`idle_timeout` 等），明确硬失败不进验收与自动返修。
+  - `SKILL.md` 补全 needs_user 等待类型：新增 `setup_recovery`（zcode 初始化恢复未完成）；补 `continue_task` 的状态与类型限制、zcode 会话定位信息丢失时的拒绝语义。
+  - `SKILL.md` 补 `codex-cli` 无头路径（用户自建 `driver=spawn` profile、model 不生效、CLI ≥0.154.0 版本要求）、`ready`/`research` 状态语义、验收 **默认并行 2**（`verifyConcurrency`）与 `requireChanges` 零变更门禁。
+  - `usage-examples.md` 新增：`codex-cli` 派活示例；meta 块**字段全表**（补 `agentEndReason`/`lastRunSignal`/`checks`/`round`/`keptInstance`/`zcodeSessionId`/`modelProvider`/`permissionMode`/`progressSummary` 等）；**错误码速查表**；项目级 `.tianshu-mcp/acceptance.json` 配置模板（含 `verifyConcurrency` 并行干扰警示与 `requireChanges` 用法）；`setup_recovery` 恢复示例；profile 整键覆盖语义。
+- **双语 README 补贡献者名录**：新增「贡献者 / Contributors」小节，按首次参与顺序列出通过 Issue 与 PR 参与项目的社区成员（头像 + 名字）。
+
+### 其他
+
+- `package.json` 版本号提升至 `0.4.1`（`serverInfo.version` 经 build 自动同步）。
+
+---
+
+## [0.4.0] — 2026-09-13
+
+### 新增
+
+- `projectPath` 安全闸门：`run_task`/`verify_task` 提交即校验（绝对路径 + 存在目录 + realpath
+  消除符号链接），拒绝主目录本身与系统/根级目录（含 macOS `/private/*` realpath 形态）；
+  提交回执明示符号链接解析来源；git 仓库有未提交变更时追加共处警示（多会话场景）。
+- ZCode GUI 驱动支持 macOS：适配主进程标题改写（argv 隐藏后端口探测放宽 + 配置端口段补扫）、
+  spawn detached+unref 实例驻留；文件夹面板按 macOS 窗口形态重写（NSOpenPanel 独立窗口 +
+  go-to 字段 AX 直写，免疫中文输入法截获）。2026-09-13 macOS arm64 + ZCode 3.11.2 真机闭环
+  验证（绑定→回读→发送→运行证据→验收 PASS→succeeded）；取消/返修/新建项目矩阵补齐前
+  macOS 保持 `research`。
+- Codex GUI 驱动支持 macOS：spawn ChatGPT.app 包内可执行（activation 按平台默认 spawn/msix-com），
+  detached+unref 实例驻留；POSIX 进程枚举与 SIGTERM 停止；darwin 安装发现默认目录；
+  项目登记状态文件（`~/.codex/.codex-global-state.json`）darwin 直写；运行观察环对
+  renderer 瞬时无响应/target 替换做 CDP 重连（连续 5 次才判断开）。2026-09-13 macOS arm64
+  真机闭环验证（发现→登记→绑定→发送→运行证据→验收 PASS→succeeded）；取消/返修矩阵
+  补齐前 macOS 保持 `research`。
+
+### 修复
+
+- zcode macOS 新建任务惰性按钮兜底：`conversation-new-task` 可能命中首页惰性图标（点击无响应），
+  项目触发器未命中时回退侧栏 `[data-testid=task-new-button]` 大按钮再重试。
+- `normalizeProjectPath` 解析符号链接：macOS `/tmp`→`/private/tmp` 曾使项目路径匹配失败
+  退化为名称匹配，误报 `project_ambiguous`；realpath 失败退回词法归一。
+- zcode macOS 面板失败的 `needsPermission` 误报：execFile message 内嵌脚本文本（含
+  `ACCESSIBILITY_PERMISSION_REQUIRED` 字面量）把一切失败报成权限问题，改判 stderr 的
+  execution error 行。
+- `get_profiles` 列出数据目录 `agent-profiles.json` 中的用户自定义 profile（此前未 resolve 不显示，`run_task` 却可用，探测反馈不一致）。
+- zcode-flow 测试桩补 `listDialogs`，消除真实 osascript/PowerShell 调用在全量负载下撞 `taskTimeoutMs` 墙钟导致的 flake。
+- CDP `connect()` 失败分支自清理 WebSocket（不再依赖调用方兜底 disconnect）；`send()` 超时定时器 unref。
+- **盘符根未被 `projectPath` 闸门拦截**（Windows）：`normPath` 会剥掉尾斜杠（`D:\` → `d:`），与拒绝清单里的 `d:/` 永不相等，故闸门对盘符根形同虚设；改为**单独的盘符根判定**，覆盖所有盘符而不依赖枚举。
+- `test/unit/project-dir-guard.test.ts` 的系统目录断言不可移植：`/etc`、`/usr` 是 POSIX 路径，Windows 上命中的是「目录不存在」而非拒绝清单；按平台分支，Windows 侧改验盘符根与 `C:/Windows`。
+- `test/unit/acceptance-parallel.test.ts` 取消用例偶发（单跑绿、全量红）：固定 250ms 在慢平台可能早于子进程 spawn，使在途 check 被误记为 `skipped`；改为**等两个在途 check 真正启动后再取消**。
+
+### 性能
+
+- GUI 实例探测、发现、注册全链路 `execFileSync`/`spawnSync` 异步化；就绪等待环每 tick 复用进程快照，进程枚举加 1.5s TTL 缓存——消除 Windows 轮询期事件循环冻结（单次最坏 30s）。
+- 验收命令检查有界并行：新增 `verifyConcurrency`（**⚠ 默认值由串行变为 2**，范围 1–4；项目级 `.tianshu-mcp/acceptance.json` 可覆盖，=1 完全退化串行——写构建产物/带 `--fix`/共享缓存目录的 checks 建议显式设 1）；日志按声明顺序拼接、格式不变；取消信号可中断在途与未启动检查。
+- git 基线哈希两遍并一遍 + 异步有界并发（untracked 上限 5000 截断）；代码分析每文件只读一次，大文件嗅探只读前缀。
+- `get_profiles` 与任务快照读改 `Promise.all`。
+- 测试套件 267s → 51s：traework UI 层 sleep 改依赖注入（生产默认值不变），vitest 拆 unit 并行 / integration 串行双 project。
+- `tsconfig.build.json` 关闭 declaration，dist 去除 70 个 `.d.ts`（140 → 71 文件）。
+
+### 文档
+
+- README（中英）新增「macOS 无头路径：codex-cli（用户 profile）」——含 ≤0.130.0 签名证书吊销的警示与完整 profile 示例。
+
+---
+
+## [0.3.4] — 2026-09-13
+
+- 修复 #8/#10 的项目选择器歧义、完整路径绑定误判和模型混合文本回读。
+- 修复 #9 的无会话环境恢复：完整任务、上下文和引用只发送一次，使用任务标记或唯一会话差集定位。
+- 增加共用截止时间的初始化恢复、可配置预算及 `setup_recovery` 暂停；原生操作超时先复检副作用，取消回收辅助进程。
+- 修复拆分模型标签、隐藏动画旧值、项目菜单焦点截获和发送按钮尚未就绪的问题。
+- 补充真实 DOM、取消及恢复回归，Windows 真机覆盖新项目冷导入、已导入项目复用和同任务恢复，实际产物与 2/2 验收通过。
+- 本版本发布 GitHub Release/tarball 并同步发布到 npm（`latest`）；macOS 尚无本次真机验证，ZCode profile 保持 `research`。
+
+详见 [发布说明](docs/release-v0.3.4.md) 和 [验收证据](docs/zcode-issue-8-10-validation.md)。
+
+## [0.3.3] — 2026-09-12
+
+修复 issue #4 / #7：适配 ZCode 3.11.2 的模型菜单与项目绑定语义，并将验收引擎收紧为 fail-closed，防止零用例、零变更任务假绿。
+
+### 修复
+
+- ZCode 供应商分组选择器同时兼容 `group-provider` 与 3.11.2 `group-family`；模型流程改为直选优先、供应商分组展开兜底，并在失败信息中附带可见文本与 `data-testid` 候选。
+- 添加新项目前收起残留工作区菜单，以最多三轮“收起—点击—验证”闭环消除首次点击被吞。
+- 项目选择优先点击 composer 菜单的 `menuitemcheckbox`，旧版侧栏项仅作回退；项目名称按 NFKC、空白和大小写归一化。
+- 项目绑定回读同时校验 composer 触发器文本与完整路径，未绑定占位词不再误判；绑定失败最多两轮幂等重试。
+- ZCode/TraeWork 内置发现目录统一为 `{PROGRAMFILES}` / `{PROGRAMFILES(X86)}`；自定义 profile 的环境占位符按大小写不敏感方式展开，未知占位符保留原样。
+- 非 optional 测试检查在退出码为 0 但输出显示零用例时改判失败。
+- Git 项目默认要求相对动工前基线产生变更；纯问答/分析任务可在 `.tianshu-mcp/acceptance.json` 设置 `"requireChanges": false` 显式关闭。
+
+### 测试
+
+- 回归覆盖 ZCode 3.11.2 family 平铺模型、旧版分组兜底、testid 诊断、项目点击被吞、composer 绑定与回读重试，以及零用例/零变更门禁。
+
+---
+
+## [0.3.2] — 2026-09-12
+
+修复 issue #5 / #6：**MCP 任务模型与 Codex GUI 内 turn 的状态脱节**。
+前者是"等用户确认时恒报 running"的完成判定死锁，后者是 `cancel_task` 只停 MCP 侧等待、
+不停 GUI 内运行且描述失实。同根问题一并收敛。
+
+### 修复
+
+- **等待用户检测（issue #5）**：
+  - `judgeCodexPoll` 新增 stall 兜底：停止按钮持续可见且对话哈希 `gui.stallTimeoutMs`
+    （默认 5 分钟）不变 → 判定等待用户，任务转 `needs_user`（`needsUserKind=user_confirmation`），
+    不再死锁在 `running` 直到总超时；对话内容恢复变化会重置 stall 计时。
+  - 新增可配置界面检测 `gui.selectors.userGate`（如结账页 `embedded-checkout`、确认卡）：
+    命中即快速转 `needs_user`；默认未配置 = 禁用，不内置未真机验证的选择器。
+  - 收紧 `stopButton` 选择器：移除 `aria-label*="取消"` 过匹配（等待用户界面的"取消"
+    按钮曾被误判为运行信号）。
+- **恢复通道（issue #5 牵连）**：`continue_task` 扩展支持 codex——
+  - `user_confirmation`：用户在 Codex 窗口处理完后恢复，MCP 仅重新接入观察 GUI 内运行
+    （不发送消息）；恢复前 turn 已完成也能正确判 `succeeded`；
+  - `login_required`：复检环境后重新派发任务书（新会话 + 项目绑定 + 完整初始指令）；
+  - zcode 原有恢复行为不变；其他 agent 明确拒绝。
+- **取消真停 GUI（issue #6）**：
+  - `cancel_task` 对 GUI agent 不再"请求即成功"：先经 CDP 尽力点击界面停止按钮，
+    并在 `gui.cancelWaitMs`（默认 15 秒）内有界等待 GUI 真正空闲后落 `cancelled`；
+    未确认停止时终态文案明示"GUI 内运行未确认停止，Codex 窗口中的任务可能仍在继续"；
+  - CLI agent 的进程树终止语义不变；
+  - `needs_user` 状态取消的文案提示"GUI 内可能仍有等待中的会话"（此时 MCP 侧无 CDP 连接，
+    列为已知边界）。
+- **重派防交叠护栏（issue #6 连锁）**：派发前发现受管实例上仍有未停止的运行时，
+  先尽力停止；仍不空闲则以 `instance_busy` 硬失败拒绝派发，杜绝新旧 turn 在同一
+  应用内交叠（取消后立刻重派曾实测踩中）。
+- 启动日志的工具数由硬编码 `8` 改为按注册表实际数量（`TOOL_DEFS.length`，当前为 9）输出。
+
+### 变更
+
+- 工具描述对齐实际语义：`cancel_task` 区分 CLI（kill 进程树）与 GUI（尽力点击停止 +
+  有界等待）；`continue_task` 去掉"只用于 ZCode"限定。
+- `GuiProfile` 新增 `stallTimeoutMs`（默认 300000）与 `cancelWaitMs`（默认 15000）配置项，
+  均可由 agent-profiles.json 覆盖。
+- 技能文档（SKILL.md §4/§5、usage-examples.md §7）补齐 codex `user_confirmation` /
+  `login_required` 恢复方式、GUI 取消语义与相关配置示例。
+
+---
+
+## [0.3.1] — 2026-09-12
+
+v0.3.0 发布后的文档与发布自动化收口：**无源码行为变更**，重点是技能自检安装文档全面重写、
+GitHub/Gitee 发行版正文合成与链接修复。
+
+### 变更
+
+- **技能文档（`skills/tianshu-mcp/`）全面重写并对齐 v0.3.0 实际工具面**：
+  - 修正 `codex` 描述：由「无头 CLI」更正为 ChatGPT 桌面端 GUI adapter（MSIX + COM 激活 + CDP），
+    标注 `model` 必填、`reasoningLevel` / `planDoc` / `designSystem` 用法、不支持 `mode`；
+  - 补齐 `run_task` 的 `context` 参数语义与 task/context 路径引用发送前校验说明；
+    修正 `autoFixRounds` 默认值优先级（调用参数 > codex 5 / zcode 2 > server 默认 0）；
+  - 补齐 `list_tasks`、`query_task(tailLines)`、`get_task_report(round)` 与
+    `verify_task`（`extraChecks` / `checksMode` / `baselineRef`）的用法与验收命令四级优先级；
+  - 补充 `needs_user` 四种等待类型与 meta 块 `needsUserKind` / `pendingQuestion` / `errorType` /
+    `reportRound` / `verificationSource` 等字段解读；
+  - 审批清单补上 `continue_task`；使用示例中的 emoji 状态标记改为文字（PASS / 告警）。
+- **发布自动化修复（v0.3.0 tag 实测暴露）**：
+  - Release 正文改为由 `docs/release-v<版本>.md` 与 `.en.md` 双语合成，文档内相对链接改写为
+    该 tag 的绝对链接，缺文档时工作流明确报错（不再产出空壳正文）；
+  - `Full Changelog` 经 `git describe` 解析上一 tag，生成 `compare/<prev>...<tag>` 比较链接，
+    不再退化为 commits 链接；
+  - 正文 `CI` 链接解析同 SHA 的 CI 运行，避免误指 Release 自身运行；
+  - Gitee 发行版纳入 `release.yml` 自动化：`scripts/gitee-release.mjs` 幂等创建/更新
+    （需仓库 Secret `GITEE_TOKEN`，未配置时明确提示并跳过）。
+- `.gitignore` 忽略 npm pack 产物与本地临时校验目录。
+- 补齐本文件与英文版底部缺失的 `[0.1.10]` / `[0.2.0]` / `[0.3.0]` / `[0.3.1]` 比较链接。
+
+---
+
+## [0.3.0] — 2026-09-12
+
+Codex 桌面端改为 **GUI 驱动**：新增 `codex-gui` adapter，通过 MSIX COM 激活 + CDP 接管，
+驱动 ChatGPT 桌面端完成「定位安装 → 启动 GUI → 绑定/新建项目 → 选模型与思考等级 →
+发指令开发 → 运行检测 → 验收 → 自动返修」全流程。
+
+### 破坏性变更（BREAKING）
+
+- **`agentId=codex` 的执行方式由无头 CLI 改为桌面端 GUI**：新增 `driver=gui` +
+  `adapter=codex-gui` + `activation=msix-com`，**移除了原 `codex exec` 无头路径**。
+  升级后 `run_task(agentId="codex")` 会启动并驱动 Codex 桌面窗口，不再是无头子进程。
+  如需保留无头执行，请按 `docs/agent-profiles.md` 另建一个 `driver=spawn` 的 profile
+  （`argsTemplate: ["exec", "<prompt:arg>", "--skip-git-repo-check", "--sandbox", "workspace-write"]`）。
+- 该路径要求本机已安装 Codex 桌面端（MSIX 商店包）；纯 CLI 环境不再直接可用。
+
+### 新增
+
+- `codex-gui` adapter（`src/agents/codex/**`）：Appx 优先的安装发现（回退扫盘取最新版本）、
+  MSIX COM 激活 + 专属 `user-data-dir` + 动态调试端口、CDP 接管与页面收敛（排除 overlay 次级窗口）。
+- 任务参数扩展：`reasoningLevel`（低/中/高，中英双语）、`planDoc`、`designSystem`。
+- 模型与思考等级：模型为 `menuitemradio` 候选，**思考强度为滑块**（0–4 档：轻度/中/高/极高/极高），
+  用方向键精确设置并回读校验；等级比较采用精确匹配（避免「高」误命中「极高」）。
+- **项目自动登记**：未在 Codex 侧登记的目标目录会直接写入 Codex 项目状态
+  （幂等、写前备份、原子写、仅在本 MCP 受管实例停止时写），从而走稳定的已绑定路径，
+  不再依赖脆弱的原生文件夹对话框；失败时自动回退界面新建路径。
+- 验收与返修：复用既有 AcceptanceEngine（`package.json` 推导默认集，含弱验收标注）；
+  验收失败由 MCP 自动生成项目内 `.zcode/plans/codex-fix-r<N>.md`（每轮独立、不覆盖）并写入返修指令，
+  默认最多 5 轮（`defaultAutoFixRounds`）。
+- 运行检测：停止按钮为权威运行信号，文本稳定仅在其后作为完成证据；无运行信号时失败开放为
+  `idle_timeout` 且保留实例（不会误判完成）。
+- `scripts/probe-codex.mjs` 真机诊断脚本；Codex 单测 67 项与集成测试（含验收失败→生成计划→返修通过闭环）。
+- 文档：`docs/codex-gui-cdp.md`、`docs/codex-windows-smoke.md`（含第二轮真实业务任务验收）及英文版。
+
+### 变更
+
+- `GuiProfile` 新增 `activation` / `userDataDir` / `appxPackageName` / `permissionMode` / `fixPlanDir`；
+  既有 `spawn` profile 不受影响。
+- `ExecutableDiscovery` 新增 `appxPackageName` / `installRelativeExe` / `scanRoots` / `scanPattern`。
+
+### 修复（真机实测暴露）
+
+- 模型触发器误命中同组权限 chip（4 个 chip 均带 `aria-haspopup`，仅模型 chip 无 `aria-label`）。
+- 思考强度原按菜单项点击，永远无法设置（实为滑块）。
+- 菜单/弹层需 **trusted** 鼠标事件才会展开（DOM `.click()` 无效）。
+- 绑定项目后工具条重渲染期间模型 chip 空读被误判为「模型不符」。
+- 模型/思考强度触发器选择器排除顶部菜单栏与模式切换器。
+- 冷启动就绪等待放宽到 150s（登记会先停实例，实测冷启动约 85s）。
+- CI：修复 `normalizeDir` 断言依赖宿主平台导致 ubuntu/macos 失败。
+- 修复集成测试未注入 `ensureRegistered` 而污染真实 Codex 项目状态的问题。
+
+### 验收
+
+- Windows 10 x64 真机：已登记项目的全链路、验收失败→自动生成计划→返修通过闭环；
+  未登记项目经自动登记后全链路通过。
+- 真实业务任务：驱动 Codex 用 HTML+CSS+JS 开发「切水果小游戏」（`GPT-5.6 Sol` + 思考强度「高」），
+  产物通过验收标准，并在无头浏览器中实测可玩（得分上升、生命扣减、Game Over 与重开正常、无 JS 异常）。
+- macOS 未验证：Codex GUI 内置状态为 `research`，不参与就绪判定。
+
+---
+
+## [0.2.0] — 2026-09-11
+
+### 新增
+
+- 独立 `zcode-gui` Electron CDP adapter：数据驱动 Windows/macOS 安装探测、动态端口、产品/进程归属核验和全局串行锁。
+- ZCode 精确项目绑定、受守卫的原生文件夹面板、`供应商/模型`、完全访问回读和幂等发送。
+- `needs_user` 暂停状态与需审批的 `continue_task`，支持原会话问题回答及旧实例、登录、系统权限处理后的环境复检。
+- 多信号运行检测、进度事件、现场保留、默认自动验收和 2 轮同会话返修；返修计划只写 MCP 任务数据目录。
+- `scripts/probe-zcode.mjs`、假 CDP/状态机/路径/模型测试和中英文文档。
+
+### 安全与兼容
+
+- GUI profile 新增显式 `adapter`；旧 `driver="gui"` 配置继续按 TraeWork 兼容。
+- ZCode 双平台真实闭环证据完成前，内置 profile 保持 `research`。
+- 不调用未公开 `app-server`，不读取凭证，不关闭用户实例，不使用固定屏幕坐标。
+
+### 修复与验收
+
+- 修复 ZCode 动态模型标签的回读解析、渲染器短暂繁忙/重载、新会话延迟登记和旧会话 ID 污染。
+- 续答 `AskUserQuestion` 时改为在原会话可访问问题卡片中精确选项并提交；零匹配或多匹配时 fail-closed。
+- Windows 10 x64 真机已通过文件开发、受控失败后同会话返修、模型提问后 `continue_task` 续跑三个闭环；macOS 真机仍待补齐。
+
+---
+
+## [0.1.10] — 2026-09-10
+
+### 修复
+
+- **修复 stdio 日志污染（issue #1）**：统一日志模块此前只有 ERROR 走 `console.error`，
+  INFO/WARN/DEBUG 都走 `console.log`，与 MCP JSON-RPC 消息共用 stdout，导致严格 stdio 客户端
+  握手或工具调用失败。现在所有通过阈值的级别一律写 stderr，stdout 只承载合法 MCP 消息。
+- 日志文件追加、时间戳、级别标签与 `<数据目录>/logs/server.log` 路径保持不变；启动失败仍以 stderr 报错。
+
+### 新增
+
+- 新增 `scripts/check-stdio.mjs` 严格 stdio 冒烟：真实子进程按字节校验完整 stdout/stderr，
+  stdout 只允许有换行分隔的合法 MCP JSON-RPC 消息（官方 schema 校验），空行 / 非 JSON / parser error /
+  退出残留片段任意一条即失败。覆盖首次启动、已有技能再次启动、`--no-skill-install`、
+  损坏 `config.json`、stub 任务运行期日志、正常 EOF 关闭六个场景。
+- 新增 `npm run check:stdio` 与 `npm run check:stdio:src` 脚本。
+
+### 测试
+
+- 新增 `test/unit/log.test.ts`：以真实子进程验证四级日志的输出通道、默认 INFO 过滤、阈值过滤后的
+  文件日志与 UTF-8 内容（修复前 4/6 失败，见 `docs/m2-evidence/issue1-old-impl-log-test-failure.txt`）。
+- CI 三平台矩阵增加 Node 24；构建后用严格 stdio 检查替换仅验证 EOF 退出的冒烟。
+- CI `pack-check` 与 Release 把本次 tarball 安装到干净消费者目录，动态读取已安装 bin 并复用同一严格
+  stdio 检查；Release 增加 `lint` 与安装包协议门禁，失败即阻断草稿创建。
+- ESLint 对 `src/**/*.ts` 启用 `no-console`（仅允许 `error`），防止再次向 stdout 直接输出。
+
+---
+
+## [0.1.9] — 2026-09-09
+
+### 修复
+
+- 修复 TraeWork 长时间思考期间 DOM 静止约 36 秒就被误判完成的问题：停止按钮与任务尾部 loading
+  成为权威运行信号，并优先于完成标志；稳定轮数只启动空闲计时，默认持续 10 分钟才返回 `idle`。
+- 修复 CDP WebSocket 断开后 `Runtime.evaluate` 永久挂起：连接关闭/错误会拒绝全部待处理请求，
+  单次 CDP 命令默认 15 秒超时，任务取消最多约 1 秒生效。
+- 仅 `completion_mark` / `ask_user` 会释放本模块启动的实例；空闲、超时、取消与 CDP 断开均保留实例，
+  并通过 `agentEndReason` / `keptInstance` 暴露原因。
+- 修复服务关闭恰逢 orchestrator 采集基线、任务状态仍为 `queued` 时被误记成用户取消的竞态；
+  用户取消现在只依据结构化取消意图判断。
+
+### 新增
+
+- 轮询期间默认每 30 秒写入可由 `query_task` 观察的进度事件。
+- 新增 `gui.idleTimeoutMs`、`gui.cdpSendTimeoutMs`、`gui.progressIntervalMs` 与 5 个可覆盖的存活探针选择器。
+
+### 测试
+
+- 新增存活真值表、CDP 命令超时/断线收敛、选择器表达式及假 CDP 实例保留等回归测试。
+- Windows/macOS/Linux × Node 20/22 与 tarball 门禁保持覆盖。
+
+---
+
+## [0.1.8] — 2026-09-08
+
+### 修复
+
+- **原子写并发缺陷**（CI 偶发失败的真实根因）：`writeJsonAtomic`/`writeTextAtomic` 的临时文件名
+  为 `<目标>.<pid>.tmp`，同进程并发写同一目标时共用同一临时文件——先完成者 rename 走后，
+  后完成者抛 `ENOENT`；Windows 上并发 rename 还会抛 `EPERM`。表现为 `rework_task` 偶发返回
+  `undefined` meta（CI windows/Node20 命中）。修复：临时文件名加随机后缀 + rename 瞬时错误退避重试。
+
+### 测试
+
+- 新增 `test/unit/atomic-write.test.ts`（3 项：并发 JSON/文本写全部成功、不残留临时文件）。
+
+---
+
+## [0.1.7] — 2026-09-08
+
+### 修复
+
+- **项目文件夹绑定仍然失败**（v0.1.6 未根治；实战反馈：原生对话框出现但编辑框为空就点了确认）：
+  - **根因**：MCP 内部传入 `normPath()` 规范化路径（小写盘符 + 正斜杠，如 `d:/Trae项目/AI游戏/象棋`），
+    而 **Windows 原生文件夹选择器不接受该形式**——实测同样回读一致，但点击确认时对话框不关闭。
+    修复：写入前用新增的 `toNativeWindowsPath()` 转成 `D:`。
+  - 写入后用 `WM_GETTEXT` **回读校验**；不一致则重新定位并重试（最多 3 次）；仍不一致**不点确认**并明确报错。
+  - footer 点击后探测到的 **hwnd 贯穿传给写入脚本**，只操作该窗口；点击后复查「该 hwnd 是否消失」。
+  - 绑定前**自动关闭遗留对话框**（上次失败残留），避免写到旧窗口上。
+  - 确认按钮增加「矩形位于对话框下半部」校验，排除同名 Pane 误命中。
+  - 对话框脚本全过程输出（HWND/READBACK）写入任务日志，便于排障。
+
+### 测试
+
+- 测试总数 **172 → 181**（单测含路径规范化、原子写并发安全；集成含遗留对话框清理）。
+- 真机验证：新中文项目 `D:\Trae项目\AI游戏\象棋`（不在下拉）走原生对话框全链路通过；
+  `五子棋` 与 ASCII 项目 `ts-bind-test` 回归通过。
+
+---
+
+## [0.1.6] — 2026-09-08
+
+### 修复
+
+- **项目文件夹绑定卡住 / 报「等待原生对话框超时」**（实战反馈，非适配器损坏）：
+  - `clickDropdownFooter` 旧实现只看 `element.click()` 的返回值就当点击成功，但该按钮点击后
+    原生弹窗可能并未出现 → 现在**点击后必须确认对话框真的出现**，否则记录下拉 DOM 快照并明确失败。
+  - 原生对话框探测在 Node 侧每 800ms 轮询一次，而 PowerShell 冷启动约 4.5–6s，
+    15s 预算只够约 2 次探测 → 改为**单次 PowerShell 调用内轮询**（脚本内 400ms 间隔），预算提到 30s。
+  - **中文路径被破坏**（实测 `D:\Trae项目\ts-bind-test` 被写成 `D:Traes-bind-test`）：
+    SendKeys/剪贴板受控制台代码页影响 → 改用 Win32 **`WM_SETTEXT`** 直接写入编辑框，CJK 路径完全可靠。
+  - **确认按钮点到了文件列表项**：`AutomationId="1"` 不唯一（列表行也用 0/1/2…）→ 改为
+    **AutomationId=1 且 ControlType=Pane** 组合定位后再按矩形坐标点击。
+  - PowerShell 输出中文乱码 → 脚本内**只用 ASCII 输出**，Node 侧 `localizeDialogMessage()` 映射回中文。
+
+### 新增
+
+- **非 Work 模式的绑定兜底**：在 Code/Design 模式绑定失败时自动**回落 Work 重试一次**，
+  成功后再切回目标模式并复核项目仍在；两次都失败才报错，错误信息包含两种模式各自的原因。
+- 真机验证：对**不在下拉列表**的新项目（`D:\Trae项目\ts-bind-test`）执行
+  `run_task(agentId=traework, mode=Code)` 全链路通过——原生对话框写入路径 → 点击确认 →
+  项目进入 TraeWork 列表（`solo-lite.local-project-folders` 22→23 条）→ 发送任务 → 自动验收 `succeeded`。
+
+### 变更
+
+- `docs/traework-cdp.md` / `.en.md`：踩坑表新增 7 条；补充「下拉项 ≠ 项目 map」的事实与兜底说明。
+
+### 测试
+
+- 测试总数 **167 → 172**（新增对话框消息映射/平台分支单测 + Code→Work 兜底集成测试）。
+
+---
+
+## [0.1.5] — 2026-09-08
+
+### 新增
+
+- **TraeWork 面板模式切换**：`run_task` 新增 `mode` 参数，支持 `Work` / `Code` / `Design`。
+  - 解析优先级：显式 `mode` 参数 > 任务书文本识别 > 保持 `Work`。
+  - 文本识别覆盖中英混写（「切换到 Code 模式」「use design mode」「工作模式」「代码模式」「设计模式」等）。
+  - 新增 `gui.modeSwitch` profile 开关（默认 `true`）。
+  - 新增纯函数 `detectModeFromText` / `resolveMode`（可单测）。
+- **专属 SVG 资产**：`assets/tianshu-mcp-icon.svg`（应用图标）、`assets/tianshu-mcp-banner.svg`（长方形横幅）。
+- 新增 `scripts/probe-traework.mjs mode <Work|Code|Design>` 子命令（真机诊断/验证）。
+- 新增中英双语发布说明 `docs/release-v0.1.5.md` / `.en.md`。
+
+### 变更
+
+- **TraeWork 执行顺序调整**：实测发现三种模式**各自维护独立的项目绑定**，切换模式会把输入栏项目换成该模式上次使用的项目。
+  因此顺序改为「确保实例 → 等待 UI → 新建会话 → 切到目标模式 → 在目标模式内绑定项目 → 切模型 → 发送」。
+- 绑定后复核「模式 + 项目」双双就位，任一不符即**响亮失败**（不静默在错误模式下开发）。
+- meta 块新增 `model` / `mode` 字段，便于天枢回读。
+- `package.json`：`license` 由 `MIT` 改为 `Apache-2.0`（与仓库 `LICENSE` 文件一致）；
+  新增 `repository` / `homepage` / `bugs`；`files` 增加 `assets`。
+- README.md / README.en.md 全量重写：技术栈勋章、SVG 横幅（在图标上方）、语言隔离（中文 README 只引中文文档，英文 README 只引英文文档）。
+
+### 修复
+
+- **rework 反馈竞态**（预存缺陷，负载下偶发）：终态快照先落盘，调用方立即 `rework_task(feedback)` 写入的指示
+  会被上一轮收尾的 `delete meta.reworkFeedback` 抹掉，导致返修轮拿不到反馈。改为在 `startTask` 启动时原子取走并清空。
+  新增回归测试 `test/integration/rework-feedback-race.test.ts`。
+- **`projectBasename` 跨平台**：原用 `path.basename`（POSIX 下不切反斜杠），Linux/macOS CI 必失败；
+  改为显式按 `\` 与 `/` 切分。
+
+### 测试
+
+- 测试总数 **153 → 167**（新增 14 项模式相关用例）。
+- 真机端到端验证：`mode=Work` / `mode=Code` / `mode=Design` 三者均完成「切模式 → 绑项目 → 发送 → 生成文件 → 自动验收通过」。
+
+---
+
+## [0.1.4] — 2026-09-08
+
+### 新增
+
+- TraeWork GUI 驱动接入（CDP）：`traework` 由 `unsupported` 改为 `driver=gui` / `status=ready`。
+  - 能力：启动/复用实例 → 新建会话 → 绑定项目文件夹（下拉命中优先，未命中走受限 computer-use 原生对话框）
+    → 可选指定模型 → 任务书回读校验后发送 → 轮询到完成 → 自动验收 → 失败生成修复计划并同会话返修。
+  - 安全：默认复用用户实例、绝不按进程树强杀、终止前核对命令行；computer-use 仅允许 TraeWork 文件夹对话框。
+- `AgentAdapter` 新增可选 `run()` 执行面；编排层按 `adapter.run` 分支（CLI 走 spawn 不变）。
+- profile 新增 `driver`（`spawn` / `gui`）与 `gui` 配置段；`run_task` 新增 `model` 参数。
+- 新增 `src/agents/traework/**`（CDP 客户端、选择器表、启动器、会话/输入/模型/回复模块、受限 computer-use）。
+- 验收失败时自动生成修复计划文件 `rework-<taskId>-r<N>.md`（任务目录 + 项目 `.tianshu-mcp`），返修消息引用文件名。
+
+### 变更
+
+- `docs/adapter-matrix.md` 的 T1 结论由 `unsupported` 更正为「已接入（driver=gui）」。
+- formatter 透传取消来源字段（`abortSource` 等）到 `query_task` 的 meta 块。
+
+### 修复
+
+- 超时终态统一：普通超时也落 `failed(timeout)` + 一次 `timeout_killed` 事件，顺序固定。
+- `shutdown` 测试轮询稳定化。
+
+### 测试
+
+- 测试总数 **72 → 153**（新增 TraeWork 相关单元/集成用例）。
+- 真机端到端验证：`run_task(agentId=traework, model=GLM-5.3, autoVerify=true)` 驱动 TraeWork 创建文件并验收通过。
+
+---
+
+## [0.1.3] — 2026-09-08
+
+### 修复
+
+- **S1** 无理由取消被误记 `interrupted`：新增 `cancelRequestedAt` / `abortSource` 独立字段，取消意图不依赖可选 `reason`（5 项回归测试）。
+- **S2** 超时终态统一（与 0.1.4 同源）。
+- **S3** tracked 预脏净差异归因：基线前脏文件按内容 hash 排除未变改动，staged/unstaged 不再误报为 agent 变更（4 项回归）。
+- **S4** `verify_task(taskId)` 持久化更新原任务元数据（`reportRound` / `verificationSource` / `latestVerificationVerdict`，保留 `agentId`）；
+  MCP 版本单一来源（`sync-version` 注入）。
+- **S5** `projects.json` 正式 Zod schema + `config`/`profiles`/`projects` last-known-good + 内容 sha256 热加载失效检测
+  （修复损坏 JSON 被当缺失重置的缺陷）。
+
+### 变更
+
+- **S6** CI/Release `npm ci` 重试修正（成功即停 / 3 次上限 / attempt 计数）；Vitest v3 升级（审计 0 漏洞）；纯文本状态标记（emoji 扫描测试）。
+
+### 测试
+
+- 测试总数 **53 → 72**。
+
+---
+
+## [0.1.2] — 2026-09-08
+
+### 变更
+
+- 构建去掉 sourceMap 发布（无 `.map`，tarball ≈ 69.9 KB）。
+
+### 测试
+
+- 测试总数 **53**。
+
+---
+
+## [0.1.1] — 2026-09-07
+
+### 新增
+
+- **R1–R5 修复后版本**：
+  - **R1** 取消/中断状态机持久化（`cancel_requested → cancelled`，`cancelReason`/`finishedAt`/`errorType` 落盘，重启可恢复、幂等、shutdown 有界等待）。
+  - **R2** 调用级 `taskTimeoutMs` 优先级修正 + 跨平台进程树终止（POSIX 进程组 SIGTERM→SIGKILL，Windows `taskkill /T /F`）。
+  - **R3** Git 基线参与差异计算（以 `baseline.head` 为边界，agent 提交不丢变更，脏工作区 hash 归因）。
+  - **R4** 验收工具参数与报告轮次语义（`round=0` 合法、手动验收不覆盖报告、`extraChecks` 追加 + `checksMode=replace`、`optional` 不影响 verdict、`baselineRef` 校验）。
+  - **R5** 移除 agent 路径硬编码（`{LOCALAPPDATA}` 等占位符 + 平台标准候选），`config`/`profile`/`projects` mtime 热加载。
+- **R6** 跨平台 CI 矩阵（Windows/macOS/Linux × Node 20/22）与 Release 版本一致性（tag/输入 = `package.json` = tarball），tarball 内容校验。
+- **R7** npm 发布 `tianshu-mcp@0.1.1` + `npx -y` 拉起 8 工具连通通过。
+- **R8** 中英双语文档同步（含 4 篇英文专题文档）。
+
+---
+
+## [0.1.0] — 2026-09-07
+
+### 新增
+
+- 首个可用版本：**M1 核心引擎 + stub-agent 全链路**。
+  - 8 个 MCP 工具：`run_task` / `query_task` / `list_tasks` / `get_task_report` / `cancel_task` / `verify_task` / `rework_task` / `get_profiles`。
+  - `TaskManager` 状态机 / 每项目串行队列 / 全局并发闸 / cancel(kill tree) / 事件流落盘。
+  - 验收引擎：git 基线/diff、默认检查集推导、命令 runner、代码分析、`report.md` / `report.json`。
+  - fix-loop 自动返修 + `needs_attention`；技能自检安装。
+  - stub-agent 三剧本（good / fix-on-first / never）集成测试 + 协议测试，**53/53 绿**。
+
+---
+
+[未发布]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.5.3...v0.5.4
+[0.5.3]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.5.2...v0.5.3
+[0.5.2]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.5.1...v0.5.2
+[0.5.1]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.3.4...v0.4.0
+[0.3.4]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.3.3...v0.3.4
+[0.3.3]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.10...v0.2.0
+[0.1.10]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.9...v0.1.10
+[0.1.9]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.8...v0.1.9
+[0.1.8]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.7...v0.1.8
+[0.1.7]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.6...v0.1.7
+[0.1.6]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/lanlan0811/tianshu-mcp/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/lanlan0811/tianshu-mcp/releases/tag/v0.1.0

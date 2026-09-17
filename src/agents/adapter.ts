@@ -1,0 +1,163 @@
+/**
+ * AgentAdapter 接口（开发计划 §7.1）：统一抽象，横向扩展点。
+ * 实现基于 profile 数据驱动：resolve 探测可执行，buildInvocation 构造命令，
+ * parseExit 判定结果。新增 agent = 新 profile +（如需）子类 adapter。
+ */
+import type { SpawnSpec } from "./spawn.js";
+import type { AgentProfile, TraeworkMode } from "../config/schema.js";
+import type { ReasoningLevel } from "../config/schema.js";
+import type { WorkspaceMode } from "../tasks/task.js";
+
+export interface ResolvedAgent {
+  id: string;
+  displayName: string;
+  profile: AgentProfile;
+  command: string;
+  argsTemplate: string[];
+  ok: boolean;
+  message: string;
+  /** resolve 成功后缓存的探测信息 */
+  discovered?: { source: "explicit" | "fallback" | "discovery"; version?: string };
+}
+
+export interface TaskContext {
+  taskId: string;
+  /** 工作区模式；缺省按 project 处理。default 模式下 projectPath/displayPath 为空串。 */
+  workspaceMode?: WorkspaceMode;
+  projectPath: string; // norm
+  displayPath: string;
+  agentId: string;
+  task: string;
+  context?: string;
+  round: number;
+  feedback?: string; // 返修轮附加的失败反馈
+  taskDir: string;
+  workDir: string;
+  taskTimeoutMs: number;
+  /** GUI 类 agent（traework）使用的模型名；CLI 类忽略 */
+  model?: string;
+  /** Codex GUI 思考等级（已归一 low/medium/high）；其他 agent 忽略 */
+  reasoningLevel?: ReasoningLevel;
+  /** Codex GUI 初始开发指令引用的计划文档路径；其他 agent 忽略 */
+  planDoc?: string;
+  /** Codex GUI 初始开发指令引用的设计系统目录路径；其他 agent 忽略 */
+  designSystem?: string;
+  /** GUI 类 agent（traework）使用的面板模式；CLI 类忽略 */
+  mode?: TraeworkMode;
+  /**
+   * ZCode：目标项目未登记时是否允许自动导入（添加项目）。省略视为允许，
+   * 显式 false 时驱动层必须在任何导入动作之前停止派发。
+   */
+  allowCreateProject?: boolean;
+  /** needs_user / 返修时恢复原 GUI 会话。 */
+  resume?: {
+    kind: "continue" | "rework";
+    message?: string;
+    sendMessage: boolean;
+    /**
+     * 重新接入观察（不发送任何消息）：codex user_confirmation 恢复专用。
+     * 用户在 GUI 处理完等待项后 turn 自行继续，MCP 只需重连 CDP 观察到终态。
+     */
+    reobserve?: boolean;
+    sessionId?: string;
+    sessionTitle?: string;
+    boundProjectPath?: string;
+    provider?: string;
+    model?: string;
+    permissionMode?: string;
+  };
+}
+
+export interface SpawnInvocation {
+  spec: Omit<SpawnSpec, "logFile" | "timeoutMs">;
+  promptText: string;
+  stdinText?: string;
+  timeoutMs: number;
+  logFile: string;
+}
+
+export interface AgentRunResult {
+  ok: boolean; // 依据 adapter 语义（默认 exit 0）
+  exitCode: number | null;
+  timeout: boolean;
+  killed: boolean;
+  error?: string;
+  durationMs: number;
+  logFile: string;
+  hardFailure?: boolean; // 基础设施/认证等错误，不进入验收/返修
+  /** GUI agent 的结构化结束原因（如 completion_mark / idle_no_completion / timeout） */
+  endReason?: string;
+  /** GUI 实例是否因任务未真正完成而被保留 */
+  keptInstance?: boolean;
+  needsUserKind?:
+    | "agent_question"
+    | "close_existing_instance"
+    | "login_required"
+    | "system_permission"
+    | "setup_recovery"
+    | "user_confirmation";
+  pendingQuestion?: string;
+  /**
+   * 取消路径的 GUI 侧停止结果（GUI agent 专用）：
+   * clicked=是否点击了界面停止按钮；idle=等待窗口内 GUI 是否真正空闲。
+   * idle=false 时编排方必须在终态文案中明示「GUI 内运行未停止」。
+   */
+  guiStop?: { clicked: boolean; idle: boolean };
+  session?: {
+    id?: string;
+    title?: string;
+    boundProjectPath?: string;
+    provider?: string;
+    model?: string;
+    permissionMode?: string;
+  };
+  progressSummary?: string;
+}
+
+/** parseExit: SpawnResult → AgentRunResult，按 agent 语义 */
+export type ParseExitFn = (res: {
+  ok: boolean;
+  exitCode: number | null;
+  timeout: boolean;
+  killed: boolean;
+  error?: string;
+  durationMs: number;
+  logFile: string;
+}) => AgentRunResult;
+
+/** GUI 类 adapter 的自定义执行面选项 */
+export interface AgentRunOptions {
+  signal?: AbortSignal;
+  logger: AgentRunLogger;
+  /** 进度回报（写入任务事件流，供 query_task 观察） */
+  onProgress?: (note: string) => void | Promise<void>;
+}
+
+/** 只依赖用到的最小日志接口，避免 adapter 层与 Logger 实现耦合 */
+export interface AgentRunLogger {
+  info(msg: string): void;
+  warn(msg: string): void;
+  error(msg: string): void;
+  debug(msg: string): void;
+}
+
+export interface AgentAdapter {
+  id: string;
+  /** 构造一次调用（命令/参数/工作目录/env/prompt 传递） */
+  buildInvocation(ctx: TaskContext, resolved: ResolvedAgent): SpawnInvocation;
+  /** 将子进程退出结果翻译为语义结果 */
+  parseExit(res: {
+    ok: boolean;
+    exitCode: number | null;
+    timeout: boolean;
+    killed: boolean;
+    error?: string;
+    durationMs: number;
+    logFile: string;
+  }): AgentRunResult;
+  /**
+   * 可选：自定义执行面。存在时 TaskOrchestrator 不再 spawn 子进程，
+   * 而是调用它（GUI 类 adapter 如 traework 实现；CLI 类不实现，走原 spawn 路径）。
+   */
+  run?(ctx: TaskContext, resolved: ResolvedAgent, opts: AgentRunOptions): Promise<AgentRunResult>;
+}

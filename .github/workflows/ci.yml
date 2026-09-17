@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  visual-browser:
+    name: Visual browser (${{ matrix.os }} / Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15-intel, macos-15]
+        node: [20, 22, 24]
+    env:
+      TIANSHU_VISUAL_BROWSER_TEST: "1"
+      TIANSHU_VISUAL_EVIDENCE: .tmp-check/visual-evidence
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Explicitly install pinned browser
+        id: browser
+        shell: bash
+        run: |
+          BROWSER=$(node dist/index.js visual browser install)
+          echo "executable=$BROWSER" >> "$GITHUB_OUTPUT"
+      - name: Allow Chrome sandbox user namespaces on Ubuntu
+        if: runner.os == 'Linux'
+        env:
+          BROWSER_PATH: ${{ steps.browser.outputs.executable }}
+        run: |
+          sudo tee /etc/apparmor.d/tianshu-visual-chrome >/dev/null <<EOF
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile tianshu-visual-chrome "$BROWSER_PATH" flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser -r /etc/apparmor.d/tianshu-visual-chrome
+      - name: Real browser and image acceptance
+        run: npx vitest run visual --maxWorkers=1
+      - name: Production tarball visual acceptance and offline report
+        shell: bash
+        env:
+          TIANSHU_VISUAL_REPORT_EVIDENCE: .tmp-check/visual-evidence/report.png
+        run: |
+          PACKAGE_DIR="$RUNNER_TEMP/visual-package"
+          CONSUMER="$RUNNER_TEMP/visual-consumer"
+          mkdir -p "$PACKAGE_DIR" "$CONSUMER"
+          npm pack --pack-destination "$PACKAGE_DIR"
+          VERSION=$(node -p "require('./package.json').version")
+          npm install --prefix "$CONSUMER" --omit=dev --no-audit --no-fund "$PACKAGE_DIR/tianshu-mcp-$VERSION.tgz"
+          node scripts/check-visual-consumer.mjs --package-dir "$CONSUMER/node_modules/tianshu-mcp"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-${{ matrix.os }}-node-${{ matrix.node }}
+          path: .tmp-check/visual-evidence
+
+  build-test:
+    name: Build & Test (${{ matrix.os }} / Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install dependencies (up to 3 attempts)
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            echo "attempt $i/3: npm ci"
+            if npm ci; then
+              echo "npm ci succeeded on attempt $i/3"
+              exit 0
+            fi
+            if [ "$i" -lt 3 ]; then echo "npm ci attempt $i/3 failed, retrying in 5s..."; sleep 5; fi
+          done
+          echo "npm ci failed after 3 attempts"
+          exit 1
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Lint
+        run: npm run lint
+      - name: Unit & integration & protocol tests (2 attempts on flake)
+        shell: bash
+        run: |
+          npm test && exit 0
+          echo "tests failed on first attempt, retrying once..."; sleep 3
+          npm test
+      - name: Build (tsc → dist/)
+        run: npm run build
+      - name: Strict stdio protocol check (stdout must carry only MCP messages)
+        # 真实子进程捕获完整字节流：非协议行 / parser error / 空行 / 残留片段任意一条即失败。
+        # 覆盖 6 个必测场景（首次/再次启动、禁用技能安装、损坏 config、任务运行期日志、EOF 关闭）。
+        run: npm run check:stdio
+      - name: No unexpected tracked diff after build
+        shell: bash
+        run: |
+          MODIFIED=$(git status --porcelain | awk '{print $1}' | grep -v '^??' || true)
+          if [ -z "$MODIFIED" ]; then
+            echo "worktree clean (no tracked modifications)"
+          else
+            echo "unexpected tracked diff after build:"; git status --porcelain; exit 1
+          fi
+
+  pack-check:
+    name: npm tarball content check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies (up to 3 attempts)
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            echo "attempt $i/3: npm ci"
+            if npm ci; then echo "npm ci succeeded on attempt $i/3"; exit 0; fi
+            if [ "$i" -lt 3 ]; then echo "npm ci attempt $i/3 failed, retrying in 5s..."; sleep 5; fi
+          done
+          echo "npm ci failed after 3 attempts"
+          exit 1
+      - name: Build
+        run: npm run build
+      - name: Pack to temp and assert required contents
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/pkg"
+          npm pack --pack-destination "$RUNNER_TEMP/pkg"
+          TGZ=$(ls "$RUNNER_TEMP/pkg"/*.tgz | head -1)
+          test -n "$TGZ"
+          # 先落一份清单再逐条 grep：直接 `tar | grep -q` 会因 grep 提前退出触发
+          # tar 的 SIGPIPE（stdout: write error），在 Actions 的 pipefail 下误报缺失。
+          LIST="$RUNNER_TEMP/pkg/listing.txt"
+          tar -tzf "$TGZ" > "$LIST"
+          MISSING=0
+          for f in package/dist/index.js package/skills/tianshu-mcp/SKILL.md \
+                   package/dist/agents/zcode/adapter.js package/dist/agents/zcode/run.js \
+                   package/scripts/probe-zcode.mjs package/README.md package/README.en.md package/LICENSE; do
+            if ! grep -qF "$f" "$LIST"; then echo "$f missing"; MISSING=1; fi
+          done
+          [ "$MISSING" -eq 0 ] || exit 1
+          echo "TGZ=$TGZ" >> "$GITHUB_ENV"
+          echo "tarball content OK: $TGZ"
+      - name: Install tarball into clean consumer & run strict stdio check
+        shell: bash
+        # 消费者不安装项目开发依赖；动态读取已安装 bin，并复用同一严格 stdio 检查。
+        run: |
+          CONSUMER="$RUNNER_TEMP/consumer"
+          rm -rf "$CONSUMER"; mkdir -p "$CONSUMER"
+          (cd "$CONSUMER" && npm init -y >/dev/null && npm install --no-audit --no-fund "$TGZ")
+          BIN="$CONSUMER/node_modules/tianshu-mcp/dist/index.js"
+          test -f "$BIN" || { echo "installed bin missing: $BIN"; exit 1; }
+          # 安装包内无 src/，脚本自动回退读 dist/mcp/tools.js 抽取工具集合
+          node scripts/check-stdio.mjs \
+            --entry "$BIN" \
+            --repo "$CONSUMER/node_modules/tianshu-mcp" \
+            --expect-version "$(node -p "require('./package.json').version")" \
+            --fixtures "$GITHUB_WORKSPACE/test/stub-agent"

@@ -1,0 +1,146 @@
+# 视觉验收验证进度
+
+[English](visual-validation.en.md)
+
+目标计划：本地 `.codex/plans/2026-09-14-issue-3-visual-acceptance-plan.md`（英文版同名 `.en.md`），两者均保持 Git 忽略。目标版本 v0.5.0 已发布；Windows 10 本机完整功能矩阵与 macOS 13+（Intel 与 Apple Silicon）真实系统证据均已采集，原始记录见 [visual-validation-evidence/](visual-validation-evidence/)。
+
+## 一、平台证据（系统 / Node / 浏览器 / 命令 / 结果）
+
+### 1.1 Windows 10 x64 本机
+
+- 系统：Windows 10 Pro x64（10.0.19045）
+- Node：24.18.0
+- 浏览器：托管 Chrome 148.0.7778.97（与固定版本一致）；本机 Microsoft Edge 144.0.3719.104（独立验收实例）
+- 命令与结果：
+  ```sh
+  TIANSHU_VISUAL_BROWSER_TEST=1 npx vitest run \
+    test/integration/visual-browser-smoke.test.ts \
+    test/integration/visual-capture.test.ts \
+    test/integration/visual-flow.test.ts
+  ```
+  → **3 files / 10 tests passed**（浏览器冒烟 1、真实捕获 8、基准批准与冻结流程 1）。原始输出：[windows-10-tests.log](visual-validation-evidence/windows-10-tests.log)
+- 完整功能矩阵（计划 §6「真实浏览器集成」逐项留证）：
+  ```sh
+  node scripts/evidence-visual-windows.mjs --out <evidence.json>
+  ```
+  → **9/9 通过**。原始记录：[windows-10-matrix.json](visual-validation-evidence/windows-10-matrix.json)
+
+| 矩阵项 | 结果 | 实际证据 |
+|---|---|---|
+| `existing` 来源截图且不管理原进程 | ✅ | 截图成功，原监听者仍在监听 |
+| 静态服务 + 托管 Chrome：桌面/移动视口、整页、元素 | ✅ | desktop 1280×720、mobile 390×844、fullPage 高 960、element 120×60；浏览器 `Chrome/148.0.7778.97` |
+| 端口冲突阻塞 | ✅ | `PORT_CONFLICT`，不擅自复用 |
+| 冲突时不结束他人服务 | ✅ | 原监听者仍绑定 |
+| 就绪失败有界阻塞 | ✅ | `ITEM_TIMEOUT` |
+| 就绪失败后清理子进程 | ✅ | 子进程 PID 已不存在 |
+| 本机 Edge 独立实例可用并记录真实版本 | ✅ | `Edg/144.0.3719.104`，`environmentBrowser` 一致 |
+| 版本不匹配可观测 | ✅ | 本机 `Edg/144.0.3719.104` vs 固定 `148.0.7778.97`；托管模式强制校验固定版本 |
+| 显式浏览器路径缺失时阻塞 | ✅ | `BROWSER_MISSING`，不偷偷改用本机浏览器 |
+
+补充：真实浏览器用例另覆盖中文与带空格项目路径、主文档 302 跳转来源校验、Cookie/localStorage 导入与失效、外部资源允许与拦截、屏蔽区域、截图差异与规则冻结。
+
+### 1.2 macOS 13+（Intel 与 Apple Silicon）
+
+在 GitHub 托管的 **macOS 15（Darwin 内核 24.6.0）** 真机 runner 上执行，覆盖 **x64（Intel）** 与 **arm64（Apple Silicon）** 两种架构：
+
+- 目标提交：`de34278`（CI 运行 [34840415189](https://github.com/lanlan0811/tianshu-mcp/actions/runs/34840415189)）
+- 命令：`TIANSHU_VISUAL_BROWSER_TEST=1 npx vitest run visual --maxWorkers=1`
+- 浏览器：托管 Chrome 148.0.7778.97（由 `visual browser install` 显式安装）
+- 结果：两种架构 **Test Files 10 passed (10) / Tests 51 passed (51)**；同一作业内的生产 tarball 独立消费者视觉验收也通过（`"passed": true`）。原始记录：[macos-ci-summary.txt](visual-validation-evidence/macos-ci-summary.txt)
+
+| 系统（架构） | Node | 浏览器 | 结果 | 原始记录 |
+|---|---|---|---|---|
+| macOS 15（arm64 / Apple Silicon） | 20.20.2 | Chrome/148.0.7778.97 | passed | [environment.json](visual-validation-evidence/macos-15-arm64-node20.environment.json) |
+| macOS 15（arm64 / Apple Silicon） | 22.23.2 | Chrome/148.0.7778.97 | passed | [environment.json](visual-validation-evidence/macos-15-arm64-node22.environment.json) |
+| macOS 15（arm64 / Apple Silicon） | 24.20.0 | Chrome/148.0.7778.97 | passed | [environment.json](visual-validation-evidence/macos-15-arm64-node24.environment.json) |
+| macOS 15（x64 / Intel） | 20.20.2 | Chrome/148.0.7778.97 | passed | [environment.json](visual-validation-evidence/macos-15-intel-node20.environment.json) |
+| macOS 15（x64 / Intel） | 22.23.2 | Chrome/148.0.7778.97 | passed | [environment.json](visual-validation-evidence/macos-15-intel-node22.environment.json) |
+| macOS 15（x64 / Intel） | 24.19.0 | Chrome/148.0.7778.97 | passed | [environment.json](visual-validation-evidence/macos-15-intel-node24.environment.json) |
+
+说明：以上为 GitHub 托管 macOS runner 的真实 macOS 系统与真实架构证据，非维护者个人设备留证；证据随 CI 产物保存，可在上述运行页面重新获取。
+
+## 二、本机与工程门禁
+
+- **全量测试 486 passed / 10 skipped**（Windows 10 x64，Node 24.18.0）；10 项真实浏览器门禁用例以 `TIANSHU_VISUAL_BROWSER_TEST=1` 单独跑通 **10/10**。
+- **生产 tarball 独立消费者验收通过**：`npm pack` → 装入无开发依赖目录 → 批准基准 → 图片规格 → 检出真实像素缺陷 → 离线 HTML 断网可用（状态过滤、透明叠加、区域定位）。
+- `typecheck`、`lint`、`build`、`pack:check`、严格 stdio 检查全部通过；构建后无意外已跟踪文件变更。
+- **CI 目标提交成功**：`b1505f5`、`de34278` 与最终提交 `fb18249` 的 `CI` 工作流全绿。`fb18249` 的 12 个 `visual-browser` 作业（含 6 个 macOS：`macos-15-intel` 与 `macos-15` × Node 20/22/24）全部成功，`build-test` 与 `pack-check` 亦成功。早期 `df7eb18` 的 CI 在 `Build & Test (ubuntu-latest / Node 20)` 因 `zcode-flow` 任务总时限时序竞态失败一次，与视觉模块无关。链接：https://github.com/lanlan0811/tianshu-mcp/actions/runs/34841685757
+
+## 三、发行结果（已核实）
+
+- `Release` 工作流成功，包含「要求目标提交存在成功 CI」与「要求镜像凭据存在」两道闸门及 GitHub/Gitee 双发行步骤。链接：https://github.com/lanlan0811/tianshu-mcp/actions/runs/34839014803
+- GitHub 发行：`tag v0.5.0`（非草稿），资产 `tianshu-mcp-0.5.0.tgz`，正文为双语发行说明。
+- Gitee 发行：`tag v0.5.0`（id 1143672），目标提交 `b1505f5`，正文为双语发行说明。
+- 双仓一致：`github/master`、`gitee/master`、两仓 `v0.5.0` 标签与本地标签均指向 `b1505f5`（其后 `master` 前进到 `de34278` 的记录提交）。
+- **npm 发布（计划外，按用户指示执行）**：维护者 npm 账号已登录且为包所有者，`npm publish` 成功将 `tianshu-mcp@0.5.0` 发布到 `latest`（registry 直查确认，`dist.shasum` = `85c39756…`，与本地构建一致）。独立目录 `npm install tianshu-mcp@0.5.0` 后 `visual doctor` 四项全通过。开发计划 §7 原本「不额外增加 npm registry 发布」，本次按用户明确指示补发，以保持 README「持续发布」表述与历史版本一致。
+
+### v0.5.1（文档/证据补齐，无运行时变更）
+
+- `Release` 工作流成功（含「要求目标提交存在成功 CI」与「要求镜像凭据存在」两闸门）。链接：https://github.com/lanlan0811/tianshu-mcp/actions/runs/34847120767
+- 目标提交 `c24fc67` 的 `CI` 全绿：22 个作业全部成功，其中 12 个 `visual-browser` 作业（含 6 个 macOS）全绿。
+- GitHub 发行：`tag v0.5.1`（非草稿），资产 `tianshu-mcp-0.5.1.tgz`，正文双语含 Full Changelog 与 npm 链接。
+- Gitee 发行：`tag v0.5.1`（id 1143824），目标提交 `c24fc67`，正文双语。
+- 双仓一致：`github/master`、`gitee/master`、两仓 `v0.5.1` 标签与本地标签均指向 `c24fc67`。
+- npm：`tianshu-mcp@0.5.1` 已发布到 `latest`（registry 直查确认 `dist.shasum` = `529efba6…`，与本地构建一致）；独立目录安装后 `visual doctor` 四项通过。
+- 附带修复：`package-lock.json` 根包版本从滞后的 `0.4.1` 同步为 `0.5.1`。
+
+### v0.5.4（AI 视觉内容校验，issue #13 第二阶段）
+
+- `Release` 工作流成功（含「要求同 SHA 的成功 CI」与「要求镜像凭据存在」两道闸门及 GitHub/Gitee 双发行步骤）。链接：https://github.com/lanlan0811/tianshu-mcp/actions/runs/35095384929
+- 目标提交 `ea797d1` 的 `CI` 全绿：22 个作业全部成功（`build-test` × 9、`visual-browser` × 12、`pack-check` × 1），其中 6 个 `visual-browser` 作业覆盖 macOS 15（Apple Silicon arm64）与 macOS 15 Intel（x64）× Node 20/22/24。链接：https://github.com/lanlan0811/tianshu-mcp/actions/runs/35094765071
+- GitHub 发行：`tag v0.5.4`（非草稿），资产 `tianshu-mcp-0.5.4.tgz`，正文为双语发行说明。链接：https://github.com/lanlan0811/tianshu-mcp/releases/tag/v0.5.4
+- Gitee 发行：`tag v0.5.4`，目标提交 `ea797d1`，正文为双语发行说明（由 `scripts/gitee-release.mjs` 用 `GITEE_TOKEN` 幂等补齐）。
+- 双仓一致：`github/master`、`gitee/master`、两仓 `v0.5.4` 标签与本地标签均指向 `ea797d1`。
+- npm：`tianshu-mcp@0.5.4` 已发布到 `latest`（registry 直查确认 `dist.shasum` = `eb405680…`，与本地 `npm pack` 一致）。
+
+## 四、v0.5.4 验证记录（AI 内容校验，issue #13 第二阶段）
+
+判定桩端到端证据（Windows 10 x64，Node 24.18.0，2026-09-16）。判定桩为 `test/fixtures/content-judge.mjs`
+（跨平台 node 脚本，由环境变量决定输出通过 / 不通过 / 平票 / 非法输出 / 非零退出 / 睡眠超时），
+全部用例不依赖真实三方视觉 CLI，也不依赖浏览器（浏览器门禁用例单列在下方）。
+
+| 验证点 | 结果 | 证据 |
+|---|---|---|
+| 采样票型与多数票 | 通过 | `visual-content-flow` / `visual-content-verdict`：3/3、2/3、1/2 平票、1/1、`samples:1` 全部穷举 |
+| 缓存命中零重跑 | 通过 | `visual-content-flow`「cache makes the second round run zero judge invocations」：第二轮调用次数为 0，结果标 `cached:true` |
+| 命令二进制升级使缓存失效 | 通过 | `visual-content-cache`：`commandDigest` 变化导致 miss；不可计算时不写缓存 |
+| `uncertain` 不致败、不返修 | 通过 | `visual-content-flow`「uncertain verdicts never gate the round」+ `visual-content-warning`（整轮 message 出现「AI 内容判定不确定（仅告警）」） |
+| 告警不致败但在整轮消息可见（P4） | 通过 | `visual-content-warning`：optional:true + blocked 项不进 `blockingIssues`，message 出现「AI 内容告警未通过（不影响结论）: logo [CONTENT_COMMAND_FAILED]」 |
+| `blocking:true` 致败 | 通过 | `visual-content-flow`「blocking content mismatches fail the round」：verdict 失败、`visualFailed` 命中 |
+| 整轮级阻塞不产结果行（P2/P3） | 通过 | `visual-content-blocked`：全局命令不可解析、**逐规则覆盖命令**不可解析、env 引用缺失三种情形均整轮 `configurationError` 且 `report.visual` 为空 |
+| 单项失败仅告警 | 通过 | `visual-content-blocked`：非零退出/输出非法为单项结果，不升级整轮 |
+| 返修计划隔离告警项 | 通过 | `traework-repair-plan` + `visual-content-warning`：告警项列入「仅告警项（不必修复）」，第 2 节「必须修复」不含告警项 |
+| 置信度闸门语义 | 通过 | `visual-content-verdict` + `visual-content-flow`：未配置不生效；低于阈值降级 uncertain；命令不报 confidence 时标注「minConfidence 未生效」 |
+| 预算自洽硬校验（P1） | 通过 | `visual-content-schema`：`samples:3` + `timeoutMs:120000` + 默认 `roundTimeoutMs:300000` 被拒绝；逐规则覆盖后仍自洽的正例通过 |
+| `pixel:false` 语义页面豁免基准（D9，真实浏览器） | 通过 | `visual-flow`「semantic-only pages need no baseline and yield a content result」：无基准目录、不报 `BASELINE_APPROVAL_REQUIRED`，产出 `login-content` 内容项；`visual-snapshot` 锁定其冻结摘要显式记 null 且不受残留基准文件影响 |
+| 一次截图产出像素+内容两项（真实浏览器） | 通过 | `visual-flow`「pixel pages with content produce both items from one screenshot」：基线流程不变，两项同源，新任务缓存隔离后判定重跑 |
+| `visual content probe` 不写证据/缓存 | 通过 | `visual-content-probe`：不落 `visual/` 目录与 `visual-content-cache/`；未知规则 ID 报 `CONTENT_RULE_UNKNOWN` |
+| 判定超时分类 | 通过 | `visual-content-command`：超时 → 单项 blocked + `CONTENT_TIMEOUT`（仅告警、不升级整轮），并断言临时输入文件被删除 |
+| `visual doctor` 内容诊断 | 通过 | `visual-runtime`：逐条有效命令解析 + `allowRemote` 清单；命令不可解析时该 finding 判失败；预算 finding 给出总量对比 |
+
+工程门禁（本机）：`npm test` **647 passed / 12 skipped**（67 个文件；v0.5.4 tag `ea797d1` 为 644，发布后补齐「超时分类」与「临时输入删除」两项契约断言及 doctor 总预算建议分支）；12 项浏览器门禁用例以
+`TIANSHU_VISUAL_BROWSER_TEST=1` 单独跑通 **12/12**（visual-browser-smoke 1、visual-capture 8、visual-flow 3，
+含新增的 2 项 D9 用例）；`typecheck`、`lint`（0 warning）、`build`、`check:stdio` 全绿。
+
+**macOS 真实系统证据（CI runner，本阶段已采集）**：目标提交 `d762581` 的 `CI` 工作流全绿
+（[运行 35093217490](https://github.com/lanlan0811/tianshu-mcp/actions/runs/35093217490)，22 个作业全部成功），
+其中 6 个 `visual-browser` 作业覆盖 **macOS 15（Apple Silicon arm64）** 与 **macOS 15 Intel（x64）** × Node 20/22/24，
+以 `npx vitest run visual --maxWorkers=1` 跑通本阶段全部视觉用例（含新增的内容校验与 D9 语义页面用例）。
+这是 GitHub 托管 macOS runner 的真实系统与真实架构证据，非维护者个人设备留证。
+
+**未覆盖项（如实标注，不得视为通过）**：
+
+- **未在维护者个人 macOS 设备上复核**：macOS 证据来自 CI 托管 runner（见上）；取消/返修等 GUI 矩阵的
+  macOS 覆盖与本模块无关。
+- **未与真实三方视觉 CLI 实测**：全部证据基于仓库内判定桩；真实模型/CLI 的响应延迟、输出风格、
+  置信度习惯均在维护者自备命令后才可知。
+- **未验证「图片实际未离开本机」**：MCP 的强制力仅在契约层（未放行 `allowRemote` 时禁用 base64 占位符），
+  命令自身行为无法在系统层审计，见 [SECURITY.md](../SECURITY.md)。
+
+## 五、已知限制
+
+- macOS 证据来自 CI 托管 runner，未在维护者个人 macOS 设备上复核。
+- Windows 10 本机矩阵覆盖 `scripts/evidence-visual-windows.mjs` 列出的项；未列出项（如真实 GUI 桌面交互）不在视觉模块范围内。
+- 官网目录 `tianshu-mcp-web` 不在开发范围内。
+
+禁止将未执行项目标记为通过。

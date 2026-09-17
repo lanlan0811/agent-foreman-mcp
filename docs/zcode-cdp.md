@@ -1,0 +1,176 @@
+# ZCode GUI（CDP）适配器
+
+## 状态
+
+ZCode 已从无头 CLI 占位升级为独立的 `zcode-gui` adapter。它通过 Electron 的本地 CDP 页面驱动 ZCode 主界面；Windows/macOS 原生自动化只处理由 ZCode 新打开的文件夹选择面板。内置 profile 当前仍为 `research`：Windows 10 已完成安装发现、版本读取和既有非 CDP 实例保护验证；macOS 基本闭环已真机验证（2026-09-13，见「真机证据状态」），取消/返修/新建项目（自动化面板）矩阵补齐前不得标为 `ready`。
+
+## 安装发现顺序
+
+1. `profile.command` 或 `profile.gui.exePath`；
+2. Windows 固定盘，按 `executableDiscovery.preferredDrives` 排序，再套用 `relativePaths`；
+3. Windows 卸载注册表中的安装位置；
+4. Program Files、Program Files (x86)、LocalAppData Programs、LocalAppData 等 profile 标准目录；
+5. PATH；
+6. macOS `/Applications/ZCode.app` 与 `~/Applications/ZCode.app` 的 `Contents/MacOS/ZCode`。
+
+`D:\Z-Code\ZCode\ZCode.exe` 只是当前 Windows 验收样本，由“D 盘优先 + 相对路径模板”发现，不是业务硬编码。运行 `node scripts/probe-zcode.mjs all` 可只读查看安装、版本、进程和 CDP 目标。
+
+## 诊断与真机冒烟
+
+`probe-zcode.mjs` 支持 `install`、`process`、`cdp`、`selectors`、`ui`、`projects`、`models`、`permission`、`liveness` 和 `session`。`models` 与 `permission` 会短暂打开对应菜单、读取稳定显示名和内部 ID，再关闭菜单；探针不会发送消息或改动账户、凭证与安全设置。
+
+仓库维护者可在明确同意把测试提示词发给 ZCode 后运行显式真机冒烟：
+
+```powershell
+npm run build
+npm run smoke:zcode -- --confirm-send --model DeepSeek/deepseek-flash --project D:\repo\app --task "只检查 package.json，不修改文件，并回复检查结果"
+```
+
+`--confirm-send`、`--model` 和 `--task` 均为必填；缺少任一参数时脚本不会发送。脚本使用隔离的 MCP 数据目录，输出任务 ID、状态变化与证据目录，并保留 ZCode 窗口。
+
+## CDP 与实例保护
+
+- 只连接 `127.0.0.1`，同时核验 CDP 页面具有 ZCode 产品标识，并核验 ZCode 根进程命令行中的调试端口。
+- 已有有效 CDP 实例时复用。
+- ZCode 已运行但没有 CDP 时，任务进入 `needs_user/close_existing_instance`。MCP 不关闭用户进程，也不复制登录数据到隔离目录。
+- 没有实例时，以 profile 配置的动态端口启动可见窗口并复用原登录态。
+- 登录页、macOS Accessibility 权限、模型提问分别进入 `login_required`、`system_permission`、`agent_question`。
+- CDP 断开、空闲超时、任务总超时都保留 ZCode 现场；不会点击停止或伪造“已终止”。
+
+## 调用
+
+```text
+run_task(
+  projectPath=D:/repo/app,
+  agentId=zcode,
+  model=DeepSeek/deepseek-flash,
+  task=根据 `.codex/plans/feature.md` 与 `./design-system` 完成开发,
+  autoVerify=true
+)
+```
+
+- `model` 必填且必须是精确的 `供应商/模型`。供应商、模型不存在、同名歧义或切换回读不一致时，发送前失败。
+- ZCode 不支持 TraeWork 的 `mode`；传入即参数错误。
+- `task/context` 中反引号路径、绝对路径以及 `./`、`../` 路径会在发送前解析。路径必须存在并位于 `projectPath` 内。
+- 每次初始调用新建会话；自动返修、`rework_task` 和已有会话的续答只允许恢复已记录的原会话。发送前的环境确认可以在没有会话锚点时继续首次派发。
+- 发送前必须精确绑定项目、回读绝对路径、选择模型并回读“完全访问”。任一状态不明确都 fail-closed。
+- ZCode 默认 `autoVerify=true`，未显式指定时 `autoFixRounds=2`。
+
+## `needs_user` 与继续
+
+`needs_user` 会释放项目运行槽和 ZCode 全局串行锁，但保存任务 ID、Git 基线、会话 ID、项目路径、模型和权限状态。服务重启不会把它归档为 `interrupted`。
+
+```text
+continue_task(taskId=tsk_..., message=选择 PostgreSQL)
+```
+
+若暂停原因是 `agent_question`，`message` 只发到精确定位的原会话；若原因是关闭旧实例、登录或系统权限，`message` 只代表“用户已处理”，恢复后重新检查环境，不把确认文本发给模型。重复恢复、状态错误或会话丢失均会拒绝。
+
+## 项目与文件夹面板
+
+项目优先按规范化绝对路径匹配。Windows 比较大小写不敏感并统一斜杠；macOS 保留平台路径语义。只有 basename 同名但无可核验路径时会停止，不会猜选。
+
+项目触发器按 profile 覆盖、稳定 testid、精确中英文标签逐级定位。当前级有多个可见匹配时停止，不混合后续备用按钮；添加、移动和取消项目按钮不参与绑定回读。路径只来自当前触发器或其唯一关联的项目条目，侧栏中的任意路径不代表当前绑定。同名不能覆盖路径冲突。
+
+模型回读优先解码 `data-model-current-value`，并核对可见模型标签；忽略隐藏旧值和无障碍提示。属性缺失时使用可见标签或标题，再兼容旧页面。当前属性和可见标签冲突、标签歧义或编码损坏均返回 `model_mismatch`，不会发送任务。
+
+找不到项目时，adapter 记录已有原生对话框，再点击 ZCode 的“选择文件夹”。Windows 只处理新出现且进程属于 ZCode 的 `#32770` 窗口，通过 UI Automation 设置并回读路径；macOS 只操作 ZCode 的 sheet/window，通过 `osascript` argv 传入路径，并优先使用与本地化无关的默认按钮语义。两端都会确认刚提交的面板已经关闭，随后仍需从 ZCode 回读完整项目路径。
+
+## 无项目（`default` 工作区）
+
+`projectPath` 可以省略（issue #12）。省略时任务在 ZCode 的 `default` 工作区运行：不分配目录、不登记或导入项目、不采集 Git 基线、不冻结项目快照、不进入项目锁，也不执行项目验收。
+
+```text
+run_task(
+  agentId=zcode,
+  model=DeepSeek/deepseek-flash,
+  task=只回答一句话：当前工作区是什么
+)
+```
+
+约束：
+
+- 无项目派发当前**只支持 ZCode**。省略 `projectPath` 而解析出的目标是其他 agent 时，在排队前返回参数错误；不会擅自改判为 ZCode。
+- 省略 `autoVerify` 固定为 `false`、省略 `autoFixRounds` 固定为 `0`；显式传 `autoVerify=true` 或 `autoFixRounds>0` 会在提交前报错（没有项目目录可验）。
+- 空字符串、`null`、相对路径、不存在的目录**不视为**无项目模式，仍按有项目模式拒绝。
+- 任务书里出现明确的本地文件引用（反引号路径、绝对路径、`./` 或 `../`）时，发送前报错并要求提供 `projectPath`——无项目模式不会退回 cwd 解析引用。
+- 执行成功后终态文案明示「未进行项目验收」，任务元数据以 `verificationNotApplicable: "no_project"` 结构化标注；`verify_task` 与 `get_task_report` 对该类任务返回不适用说明（`not_applicable: no_project`），不从 cwd 推导目录。
+- 无项目任务与有项目任务共用同一队列但使用**独立资源键**；ZCode 驱动对所有任务全局串行，因此不会争抢同一 GUI 实例。
+
+发送前会确认当前会话确实处于未绑定项目的 `default` 工作区（触发器文本命中「选择项目」等占位词，且回读不到任何项目路径）。**「不点击项目按钮」不算证明**——当前 UI 可能继承上一次绑定。若仍绑定其他项目、或无法可靠确认，任务进入 `needs_user/setup_recovery` 并保留现场，不会向错误项目发送。
+
+### 禁止自动创建项目（`allowCreateProject`）
+
+ZCode 专用可选布尔，只影响**有项目模式**：
+
+- 省略 = 目标目录未在 ZCode 项目列表中登记时，按既有行为自动导入（打开原生文件夹面板）。
+- `false` = 目标未登记时**在任何导入副作用之前**停止派发，返回 `project_not_registered` 与处理说明；不打开原生文件夹对话框、不添加项目。请在 ZCode 中手动登记该项目后重新提交。
+- 该策略随任务元数据持久化，恢复/续跑后不回退为允许创建。
+- 其他 agent 显式传入该参数会得到明确的「不支持」错误，而不是被静默忽略。
+
+## 运行、验收与返修
+
+轮询同时读取停止按钮、加载卡、活动工具、助手回复哈希、问题卡、输入框和发送按钮。停止、加载或活动工具任一存在即保持 `running`；文本短暂停顿不会提前完成。默认每 30 秒写一条结构化进度摘要。
+
+正常完成后进入统一验收引擎。验收失败时，唯一返修计划写在 `<TIANSHU_MCP_HOME>/tasks/<taskId>/rework-<taskId>-r<round>.md`，提示词包含该绝对路径和完整报告绝对路径；不向项目写临时 `.tianshu-mcp` 副本。ZCode 无法读取计划时失败，不降级成一句摘要。轮次用尽进入 `needs_attention`。
+
+## 排障
+
+- `close_existing_instance`：保存 ZCode 工作并手动退出，再调 `continue_task`。
+- `model_unavailable/model_mismatch`：用 `node scripts/probe-zcode.mjs selectors` 和 profile 选择器覆盖检查 UI 版本漂移。
+- `project_ambiguous/project_mismatch`：确保侧栏能暴露完整路径，移除无法消歧的同名项。
+- `system_permission`：在 macOS 系统设置中手动授予 ZCode/System Events Accessibility 权限。
+- `cdp_disconnected`：保留当前现场，确认实例仍在及端口归属后人工裁决。
+- `project_not_registered`：本次调用 `allowCreateProject=false` 且目标目录未登记。请在 ZCode 中手动添加该项目后重新提交，或省略该参数以允许自动导入。
+- 无项目模式停在 `needs_user/setup_recovery`：ZCode 当前仍绑定其他项目，或无法确认 `default` 工作区。请切换到未绑定项目的新会话后调用 `continue_task`。
+- 项目触发器相关失败不再统一成「等待超时」：文案会指出「不唯一（匹配 N）」「已挂载但不可见或被裁剪」「被其他元素遮挡」「点击后项目菜单未打开」中的具体一类，并附带 `selector`、匹配数与命中节点属性；诊断日志含尝试次数、实际耗时与剩余预算。
+
+## 真机证据状态（2026-09-11）
+
+| 平台 | 已验证 | 未完成 |
+|---|---|---|
+| Windows 10 x64 | 自动发现 `D:\Z-Code\ZCode\ZCode.exe`、版本 `3.11.2.6792`、既有无 CDP 实例保护、CDP 启动、原生文件夹面板导入与完整路径回读、`DeepSeek/deepseek-flash` 显示/内部 ID 回读、“完全访问”回读、真实文件开发与 2/2 验收、受控首轮失败后同会话返修通过、`AskUserQuestion → needs_user → continue_task(PASS)` 同会话续跑并 2/2 验收通过 | 无；详见 [Windows 真机验收记录](zcode-windows-smoke.md) |
+| macOS arm64 | 安装发现（`/Applications/ZCode.app`，3.11.2）、CDP 启动与复用（进程标题改写适配 + 端口段补扫）、静息选择器全命中、既存项目绑定回读、`bigmodel/GLM-5.3-Flash` 与「完全访问」回读、发送 → `stop_button` 运行证据 → `reply_stable`、真实文件开发与验收 PASS（diffstat +2 -0）、`succeeded`；手动驱动「打开文件夹」面板全流程（窗口形态 + AX 直写路径 → 确认 → 绑定成功） | 取消真停、同会话返修、`continue_task`、新项目（自动化面板）端到端；详见下节「macOS 特有结论」 |
+
+Windows 闭环已完成；macOS 基本闭环已验证（2026-09-13），取消/返修/新建项目矩阵补齐之前，内置 profile 必须保持 `research`。
+
+## macOS 特有结论（2026-09-13 真机）
+
+1. **进程标题改写**：ZCode 主进程启动完成后把标题改写为 `ZCode`（`ps` 不再显示
+   `--remote-debugging-port`）——端口归属判定从「argv 匹配」放宽为「端口上有 ZCode 页面 +
+   根进程存在」，argv 无端口时补扫配置端口段（10s 有界），扫不到才判 `needsClose`。
+   运维注意：`pkill -f` 按路径也匹配不到主进程，须按 pid 终止。
+2. **spawn 驻留**：与 codex 同款——不 `detached+unref` 时父进程退出会连坐杀掉主进程。
+3. **面板形态**：macOS 的 NSOpenPanel 是**独立窗口**（标题 `Open`，文案随 app 语言漂移），
+   不是 sheet；基线/等待/确认全部按窗口计数（保留 `sheet-count:N` 线格式，语义为面板窗口数）。
+4. **IME 截获**：`keystroke` 在中文输入法下会把 ASCII 路径改写成乱码（实测拼音 IME 下
+   `/tmp/zcode-gui-e2e` 变成 `/特没谱/自从的-归-🤔e`）——go-to 字段必须
+   `set value of text field ... to ...` AX 直写（同时免疫字段残留的旧路径）。
+5. **符号链接**：`/tmp`→`/private/tmp` 使「同一目录」出现两个字符串，路径匹配失败退化为
+   名称匹配并误报 `project_ambiguous`；`normalizeProjectPath` 已改 realpath 优先。
+6. **needsPermission 误报**：execFile 报错 message 内嵌完整脚本文本（含
+   `ACCESSIBILITY_PERMISSION_REQUIRED` 字面量），一切面板失败都被误判为权限问题；
+   现改判 stderr 的 execution error 行（真实权限错误为 `-1743`/not authorized）。
+7. **应用状态文件不可手改**：向 `~/.zcode/v2/setting.json` 的 `lastWorkspaceSession`/`recentProjects`
+   播种项目经证伪——下拉不读 recentProjects；播种 lastWorkspaceSession 会让
+   `restoreSession=true` 的启动卡死渲染（后端未分配 workspace 句柄）。项目只能经 UI 流程
+   （面板或 composer）正规登记。
+8. **新建任务按钮有两副面孔**：首页底部的 `conversation-new-task` 图标可能是惰性挂载
+   （trusted 点击返回 true 但 composer 未打开）；侧栏 `[data-testid=task-new-button]` 大按钮
+   才是真入口。v0.3.4 流程在项目触发器未命中时回退侧栏按钮再重试（`newTaskSidebar` 键）。
+
+## 无会话锚点的环境恢复（#9）
+
+关闭旧实例、登录或权限处理后，如果原任务尚无会话，continue_task 将重新采集发送前会话快照，再发送完整任务、上下文和已验证引用。确认文本不会发送给模型。已有会话的续答和返修仍须回选并核对原会话。
+
+发送确认与会话识别共用最多 60 秒、受任务剩余时间约束的观察窗口。优先任务标记，其次首次派发的唯一新会话差集；多个新会话时不能猜选当前活动面板。无法确认则保留现场并报告 send_unknown 或 session_lost，不自动重复发送。
+
+## 分阶段自动恢复（#10）
+
+初始化按准备连接、面板基线、打开文件夹、提交路径和绑定确认分阶段进行。默认最多两分钟，且不超过任务剩余时间。恢复期间任务保持进行中并输出进度，不消耗自动返修轮数。配置见 [agent profiles](agent-profiles.md#zcode-初始化自动恢复)。
+
+瞬态探测故障有限重试；每次重试前先复检导入与绑定状态。原生提交超时后如果已经绑定则直接继续；结果未知时不重复点击、输入或提交。已有绑定不会再次点击选中的复选项。取消会中断等待并终止本次辅助进程，保留 ZCode。
+
+自动恢复未完成时进入 `needs_user/setup_recovery`。请在 ZCode 内完成提示的项目处理，再调用 `continue_task`；确认消息不发给模型，原任务和验收基线保留。macOS 权限不足仍为 `system_permission`；探测错误或未知基线不会当作空面板状态。任务总时限先到则为 `task_timeout`。
+
+模型回读兼容供应商与模型名拆分为多个文本节点的布局，并排除透明祖先、被裁剪的旧动画节点。项目绑定通过后收起残留菜单，避免菜单截获输入焦点。发送前等待唯一、启用且未被遮挡的发送按钮；该等待只读，不重复发送。Windows 原生操作先按进程及对话框句柄筛选，再查询目标无障碍树，阶段日志使用 `native:` 前缀。

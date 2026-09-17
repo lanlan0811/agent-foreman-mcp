@@ -1,0 +1,771 @@
+import { ZCODE_SETUP_DEFAULTS } from "../../config/schema.js";
+/**
+ * Codex GUI 任务编排（开发计划 §4，对应需求 9 步）。
+ *
+ * 流程：定位安装 → 启动受管 GUI（COM 激活 + 专属 profile）→ 绑定/新建项目 →
+ * 选模型与思考等级 → 强制权限 → 输入指令 → 发送确认 → 运行检测 →
+ * （验收与返修由 fix-loop 驱动，本模块只负责一轮 agent 执行）。
+ *
+ * 关键约束：
+ * - 必须 activation=msix-com + 专属 user-data-dir，否则 CDP 端口不会开启。
+ * - 绝不复用用户手动打开的默认 profile 实例（单实例锁会吞掉调试参数）。
+ * - 原生文件夹对话框由 dialog.ts 键盘自动化，fail-closed，绝不碰既有窗口。
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { createHash } from "node:crypto";
+import type {
+  AgentRunLogger,
+  AgentRunOptions,
+  AgentRunResult,
+  ResolvedAgent,
+  TaskContext,
+} from "../adapter.js";
+import type { GuiProfile } from "../../config/schema.js";
+import { mkdirp } from "../../util/fs.js";
+import { parseCodexModel, exactUiName, parseTriggerValue, type NormalizedLevel } from "./model.js";
+import { matchCodexProject, projectBasename } from "./project.js";
+import { judgeCodexPoll, initialCodexState, type CodexPoll, type CodexPollState } from "./liveness.js";
+import { CodexCdpClient, CdpDisconnectedError, CdpUnavailableError } from "./cdp.js";
+import { discoverCodex } from "./discovery.js";
+import { ensureCodexInstance, listCodexProcesses, type CodexReady } from "./instance.js";
+import { listCodexDialogs, selectCodexFolder, closeStrayDialogs } from "./dialog.js";
+import { focusCodexApp } from "./launcher.js";
+import { ensureProjectRegistered } from "./registry.js";
+import { buildInitialPrompt } from "./input.js";
+import { validateTaskReferences } from "../zcode/references.js";
+
+export interface RunCodexArgs {
+  ctx: TaskContext;
+  resolved: ResolvedAgent;
+  opts: AgentRunOptions;
+  logFile: string;
+  deps?: Partial<CodexRunDeps>;
+}
+export interface CodexRunDeps {
+  discover: typeof discoverCodex;
+  ensureInstance: typeof ensureCodexInstance;
+  listProcesses: typeof listCodexProcesses;
+  createClient: (port: number, timeout: number, selectors: Record<string, string>) => CodexCdpClient;
+  listDialogs: typeof listCodexDialogs;
+  selectFolder: typeof selectCodexFolder;
+  closeDialogs: typeof closeStrayDialogs;
+  focusApp: typeof focusCodexApp;
+  ensureRegistered: typeof ensureProjectRegistered;
+  sleep: (ms: number) => Promise<void>;
+}
+const DEFAULT_DEPS: CodexRunDeps = {
+  discover: discoverCodex,
+  ensureInstance: ensureCodexInstance,
+  listProcesses: listCodexProcesses,
+  createClient: (p, t, s) => new CodexCdpClient(p, t, s),
+  listDialogs: listCodexDialogs,
+  selectFolder: selectCodexFolder,
+  closeDialogs: closeStrayDialogs,
+  focusApp: focusCodexApp,
+  ensureRegistered: ensureProjectRegistered,
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+};
+
+/** 归一 Codex GUI 配置（默认值集中在此，profile 只给差异） */
+export function codexGuiOf(resolved: ResolvedAgent): GuiProfile {
+  const g = resolved.profile.gui;
+  return {
+    ...ZCODE_SETUP_DEFAULTS,
+    cdpPort: g?.cdpPort ?? 9333,
+    cdpPortAuto: g?.cdpPortAuto ?? true,
+    cdpPortRange: g?.cdpPortRange ?? 30,
+    exePath: g?.exePath,
+    exeArgs: g?.exeArgs ?? ["--remote-debugging-port=<port>"],
+    windowMode: g?.windowMode ?? "reuse",
+    launchTimeoutMs: g?.launchTimeoutMs ?? 150_000,
+    pollIntervalMs: g?.pollIntervalMs ?? 3_000,
+    stableRounds: g?.stableRounds ?? 4,
+    idleTimeoutMs: g?.idleTimeoutMs ?? 10 * 60_000,
+    stallTimeoutMs: g?.stallTimeoutMs ?? 5 * 60_000,
+    cancelWaitMs: g?.cancelWaitMs ?? 15_000,
+    cdpSendTimeoutMs: g?.cdpSendTimeoutMs ?? 15_000,
+    progressIntervalMs: g?.progressIntervalMs ?? 30_000,
+    modelSwitch: g?.modelSwitch ?? true,
+    modeSwitch: false,
+    freshSession: g?.freshSession ?? true,
+    selectors: g?.selectors ?? {},
+    modelRequired: g?.modelRequired ?? true,
+    activation: g?.activation ?? (process.platform === "darwin" ? "spawn" : "msix-com"),
+    userDataDir: g?.userDataDir,
+    appxPackageName: g?.appxPackageName ?? "OpenAI.Codex",
+    permissionMode: g?.permissionMode ?? "完全访问",
+    fixPlanDir: g?.fixPlanDir ?? ".zcode/plans",
+    defaultPermissionMode: g?.defaultPermissionMode ?? g?.permissionMode ?? "完全访问",
+    defaultAutoFixRounds: g?.defaultAutoFixRounds ?? 5,
+  };
+}
+
+function fileLogger(
+  file: string,
+  base: AgentRunLogger,
+): { logger: AgentRunLogger; close: () => Promise<void> } {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const stream = fs.createWriteStream(file, { flags: "a", encoding: "utf8" });
+  stream.write(`\n===== codex-gui run @ ${new Date().toISOString()} =====\n`);
+  const wrap = (level: string) => (m: string) => {
+    stream.write(`[${level}] ${m}\n`);
+    base[level as "info"](m);
+  };
+  return {
+    logger: { info: wrap("info"), warn: wrap("warn"), error: wrap("error"), debug: wrap("debug") },
+    close: () => new Promise((r) => stream.end(r)),
+  };
+}
+
+async function connectStableCodex(
+  ready: CodexReady,
+  gui: GuiProfile,
+  deps: CodexRunDeps,
+  allowLogin = false,
+): Promise<CodexCdpClient> {
+  const attempts = Math.max(1, Math.ceil(gui.launchTimeoutMs / 500));
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i++) {
+    const candidate = deps.createClient(ready.port, gui.cdpSendTimeoutMs, gui.selectors);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await candidate.connect();
+      // 列出的 target 可能属于正在重载的 renderer，要求一次真实 DOM 往返
+      // eslint-disable-next-line no-await-in-loop
+      if (await candidate.exists("chatInput")) return candidate;
+      // eslint-disable-next-line no-await-in-loop
+      if (allowLogin && (await candidate.exists("loginIndicator"))) return candidate;
+      lastError = new Error("Codex 输入框尚未恢复");
+    } catch (error) {
+      lastError = error;
+    }
+    candidate.disconnect();
+    // eslint-disable-next-line no-await-in-loop
+    await deps.sleep(500);
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Codex CDP 未在 ${gui.launchTimeoutMs}ms 内恢复`);
+}
+
+/** 轮询等待某语义键出现（用于对话框/弹层渲染完成） */
+async function waitFor(
+  cdp: CodexCdpClient,
+  key: Parameters<CodexCdpClient["exists"]>[0],
+  deps: CodexRunDeps,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    if (await cdp.exists(key)) return true;
+    // eslint-disable-next-line no-await-in-loop
+    await deps.sleep(300);
+  }
+  return false;
+}
+
+async function waitBound(cdp: CodexCdpClient, target: string, deps: CodexRunDeps): Promise<boolean> {
+  const want = projectBasename(target).toLocaleLowerCase();
+  for (let i = 0; i < 40; i++) {
+    // eslint-disable-next-line no-await-in-loop
+    const bound = await cdp.boundProjectName();
+    if (bound && bound.toLocaleLowerCase() === want) return true;
+    // eslint-disable-next-line no-await-in-loop
+    await deps.sleep(300);
+  }
+  return false;
+}
+
+export async function runCodexTask(args: RunCodexArgs): Promise<AgentRunResult> {
+  const started = Date.now();
+  const { ctx, resolved, opts, logFile } = args;
+  const deps = { ...DEFAULT_DEPS, ...args.deps };
+  const gui = codexGuiOf(resolved);
+  const { logger, close } = fileLogger(logFile, opts.logger);
+  let cdp: CodexCdpClient | undefined;
+  const result = (extra: Partial<AgentRunResult>): AgentRunResult => ({
+    ok: false,
+    exitCode: null,
+    timeout: false,
+    killed: false,
+    durationMs: Date.now() - started,
+    logFile,
+    keptInstance: true,
+    ...extra,
+  });
+
+  try {
+    await mkdirp(path.dirname(logFile));
+
+    // ---- 步骤 1/2：定位 + 启动受管实例 ----
+    const spec = parseCodexModel(ctx.model, ctx.reasoningLevel);
+    const found = await deps.discover(resolved.profile);
+    const exePath = resolved.command || found?.path;
+    const aumid = found?.aumid;
+    if (!exePath)
+      return result({ hardFailure: true, error: "未找到 Codex 安装（Appx 查询与扫盘均失败）", endReason: "setup_failed" });
+    if (gui.activation === "msix-com" && !aumid)
+      return result({
+        hardFailure: true,
+        error: "未能解析 Codex AUMID（MSIX 激活必需）；请确认已安装 Codex 桌面端",
+        endReason: "setup_failed",
+      });
+    logger.info(`[codex] 安装：${exePath}；AUMID=${aumid ?? "n/a"}`);
+
+    // 优先把目标目录登记进 Codex 项目列表（等价于用户手动建过一次项目）。
+    // 这一步会先停受管实例再写状态文件，因此必须在 ensureInstance 之前执行。
+    // 失败/不支持时返回 skipped，后续自动回退到界面「新建项目」路径。
+    try {
+      const reg = await deps.ensureRegistered(ctx.projectPath, gui, logger);
+      logger.info(`[codex] 项目登记：${reg.status}（${reg.message}）`);
+    } catch (e) {
+      logger.warn(`[codex] 项目登记异常，回退界面新建路径：${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    const inst = await deps.ensureInstance({ path: exePath, aumid }, gui, logger);
+    if (!inst.ready)
+      return result({ hardFailure: true, error: "Codex 实例未就绪", endReason: "setup_failed" });
+    const ready: CodexReady = inst.ready;
+
+    cdp = await connectStableCodex(ready, gui, deps, true);
+    logger.info("[codex] CDP 页面与输入状态已稳定");
+    // macOS 实测：turn 完成/页面切换瞬间 renderer 会瞬时无响应甚至被替换，单次 evaluate
+    // 挂起（15s 超时）不等于 CDP 死亡——重连当前页面继续观察，连续失败才判 cdp_disconnected。
+    const reconnectCdp = async (): Promise<void> => {
+      const next = await connectStableCodex(
+        ready,
+        { ...gui, launchTimeoutMs: Math.min(gui.launchTimeoutMs, 20_000) },
+        deps,
+        true,
+      );
+      cdp?.disconnect();
+      cdp = next;
+    };
+    if (await cdp.exists("loginIndicator"))
+      return result({
+        endReason: "needs_user",
+        needsUserKind: "login_required",
+        pendingQuestion: "请在 Codex 窗口中完成登录或引导，然后调用 continue_task 确认。",
+        session: { boundProjectPath: ctx.projectPath, model: spec.model, permissionMode: gui.defaultPermissionMode },
+      });
+
+    await cdp.dismissMenus();
+
+    const resumeKind = ctx.resume?.kind;
+    // 重观察恢复（user_confirmation）：用户在 GUI 处理完等待项后 turn 自行继续，
+    // 本轮不发送任何消息，只重连 CDP 观察 GUI 内运行至终态。
+    const isReobserve = resumeKind === "continue" && ctx.resume?.reobserve === true;
+    const isContinueConfirm = resumeKind === "continue" && !ctx.resume?.sendMessage;
+    // continue-confirm 仅出现在 login_required 恢复：登录前任务尚未发送、项目尚未绑定，
+    // 须走全新派发（新会话 + 绑定项目 + 发送初始任务书）；其余恢复轮复用当前会话。
+    const resuming = isReobserve || (resumeKind !== undefined && !isContinueConfirm);
+
+    // 重派护栏（issue #6 连锁风险）：受管实例上仍有未停止的运行时先尽力停止；
+    // 仍不空闲则拒绝派发——宁可 fail-closed，也不让新旧 turn 在同一应用内交叠。
+    // 重观察轮例外：停止按钮可见正是被观察 turn 暂停的表现。
+    if (!isReobserve) {
+      const busyStop = await stopGuiTurn(cdp, gui, deps, logger);
+      if (busyStop.clicked) logger.warn("[codex] 派发前发现实例仍有运行，已点击停止并恢复空闲");
+      if (!busyStop.idle)
+        return result({
+          hardFailure: true,
+          endReason: "instance_busy",
+          error:
+            "受管 Codex 实例上存在未停止的运行（已尝试点击停止未果）；请在 Codex 窗口人工处理后重试，避免新旧任务交叠",
+        });
+    }
+
+    // ---- 步骤 3：创建会话 + 绑定/新建项目 ----
+    if (!resuming) {
+      if (gui.freshSession && !(await cdp.click("newChat")))
+        return result({ hardFailure: true, error: "无法点击 Codex「新对话」", endReason: "setup_failed" });
+      await deps.sleep(600);
+
+      const items = await cdp.projects();
+      const matched = matchCodexProject(items, ctx.projectPath);
+      if (matched.ambiguous)
+        return result({
+          hardFailure: true,
+          error: `Codex 项目同名，无法消歧：${projectBasename(ctx.projectPath)}（同名 ${items.filter((i) => i.name.toLocaleLowerCase() === matched.target).length} 个）`,
+          endReason: "project_ambiguous",
+        });
+      if (matched.item) {
+        const label = `在 ${matched.item.name} 中开始新聊天`;
+        if (!(await cdp.clickByAriaLabel(label))) {
+          // 回退：直接点项目项本身
+          if (!(await cdp.clickByAriaLabel(matched.item.actionsLabel ?? "")))
+            return result({
+              hardFailure: true,
+              error: `无法点击 Codex 项目项「${matched.item.name}」`,
+              endReason: "setup_failed",
+            });
+        }
+        logger.info(`[codex] 已选择既有项目：${matched.item.name}`);
+      } else {
+        const created = await createProject(cdp, ctx.projectPath, aumid, gui, deps, logger);
+        if (!created.ok)
+          return result({
+            hardFailure: true,
+            error: created.error,
+            endReason: "project_create_failed",
+            session: { boundProjectPath: ctx.projectPath, model: spec.model, permissionMode: gui.defaultPermissionMode },
+          });
+      }
+      if (!(await waitBound(cdp, ctx.projectPath, deps)))
+        return result({
+          hardFailure: true,
+          error: `Codex 项目绑定回读与目标不一致（期望 ${projectBasename(ctx.projectPath)}）`,
+          endReason: "project_mismatch",
+        });
+      logger.info(`[codex] 项目绑定回读通过：${projectBasename(ctx.projectPath)}`);
+    } else {
+      logger.info("[codex] 返修/续答轮：复用当前会话与已绑定项目");
+    }
+
+    // ---- 步骤 4：模型 + 思考等级 + 权限 ----
+    const modelOk = await ensureModelAndLevel(cdp, spec, gui, deps, logger);
+    if (!modelOk.ok)
+      return result({ hardFailure: true, error: modelOk.error, endReason: modelOk.endReason });
+    const permOk = await ensurePermission(cdp, gui, deps, logger);
+    if (!permOk.ok)
+      return result({ hardFailure: true, error: permOk.error, endReason: "permission_unknown" });
+
+    // ---- 步骤 4/5：输入指令 + 发送（重观察轮跳过：不发送任何消息）----
+    if (isReobserve) {
+      logger.info("[codex] 重观察恢复（user_confirmation）：跳过输入与发送，直接观察 GUI 内运行至终态");
+    } else {
+      if (isContinueConfirm) logger.info("[codex] 用户确认文本不发送给模型；环境复检通过后发送原始任务书");
+
+      // 返修轮：ctx.feedback 即 fix-loop 生成的修复指令（引用 codex-fix-r<N>.md）；
+      // 续答轮：ctx.resume.message 是用户答复。两者都不应退回重发原始任务书。
+      const message = resuming
+        ? ctx.resume?.sendMessage
+          ? (ctx.resume.message?.trim() || ctx.feedback?.trim() || ctx.task)
+          : ctx.task
+        : buildInitialPrompt({
+            task: ctx.task,
+            context: ctx.context,
+            planDoc: ctx.planDoc,
+            designSystem: ctx.designSystem,
+            refs: safeRefs(ctx),
+          });
+
+      const attempt =
+        ctx.resume?.kind === "continue"
+          ? `continue:${createHash("sha256").update(ctx.resume.message ?? "confirmed").digest("hex").slice(0, 8)}`
+          : (ctx.resume?.kind ?? "initial");
+      const marker = `【tianshu:${ctx.taskId}:r${ctx.round}:${attempt}】`;
+      const beforeText = (await cdp.poll()).conversationText;
+
+      await cdp.typeText(marker + message);
+      const typed = await cdp.inputText();
+      if (!typed.includes(marker))
+        return result({ hardFailure: true, error: "Codex 输入框回读不一致，未发送", endReason: "input_mismatch" });
+
+      await cdp.sendMessage();
+
+      // 发送确认：任一直接证据成立即认定已提交——
+      //   a) 输入框不再含标记（文本已离开输入框）
+      //   b) 对话区出现标记
+      //   c) 出现运行信号（停止按钮）
+      // 注意：无论确认与否都**不会重发**（重发风险高于误判），故宁可放宽确认条件；
+      // 真机教训：对话区选择器曾命中空壳 main，导致明明发送成功却报 send_unknown。
+      let seenMessage = beforeText.includes(marker);
+      let seenCleared = false;
+      let seenRunning = false;
+      const confirmAttempts = Math.ceil(Math.min(60_000, Math.max(5_000, ctx.taskTimeoutMs)) / 250);
+      const confirmed = (): boolean => seenCleared || seenMessage || seenRunning;
+      let confirmCdpFailures = 0;
+      for (let i = 0; i < confirmAttempts && !confirmed(); i++) {
+        // eslint-disable-next-line no-await-in-loop
+        await deps.sleep(250);
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          const [poll, input] = await Promise.all([cdp.poll(), cdp.inputText()]);
+          confirmCdpFailures = 0;
+          seenMessage ||= poll.conversationText.includes(marker);
+          seenCleared ||= !input.includes(marker);
+          seenRunning ||= poll.stopVisible;
+        } catch (e) {
+          // 与运行检测环同因：页面切换瞬间 evaluate 可挂起——重连继续，连续失败才放大
+          if (!(e instanceof CdpDisconnectedError || e instanceof CdpUnavailableError)) throw e;
+          confirmCdpFailures += 1;
+          if (confirmCdpFailures > 5) throw e;
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            await reconnectCdp();
+          } catch {
+            /* 下轮继续重试 */
+          }
+        }
+      }
+      if (!confirmed())
+        return result({
+          hardFailure: true,
+          error: `Codex 发送结果无法确认（用户消息=${seenMessage}，输入清空=${seenCleared}，运行信号=${seenRunning}）；不重复发送`,
+          endReason: "send_unknown",
+        });
+      logger.info(
+        `[codex] 指令已确认发送（对话区=${seenMessage}，输入清空=${seenCleared}，运行信号=${seenRunning}）`,
+      );
+    }
+
+    // ---- 步骤 6：运行检测 ----
+    const deadline = started + ctx.taskTimeoutMs;
+    let state: CodexPollState = initialCodexState();
+    if (isReobserve) {
+      // 重观察轮：被观察的 turn 此前已确认在运行。种子 sawRunning 规避
+      // 「turn 在恢复前已完成 → 从未见运行信号 → 判不了 finished → 误落 idle_timeout」。
+      state.sawRunning = true;
+    }
+    let cdpFailures = 0;
+    let lastProgress = 0;
+    for (;;) {
+      // 取消（issue #6）：不止退出 MCP 等待循环，还要尽力点击 GUI 停止按钮并等待空闲，
+      // 结果经 guiStop 上报，由编排方在终态文案中如实反映。
+      if (opts.signal?.aborted) {
+        const guiStop = await stopGuiTurn(cdp, gui, deps, logger);
+        return result({ killed: true, endReason: "aborted", guiStop });
+      }
+      if (Date.now() >= deadline)
+        return result({
+          timeout: true,
+          endReason: "task_timeout",
+          error: "Codex 任务总时限已到；已停止 MCP 等待并保留 Codex 现场",
+        });
+      // eslint-disable-next-line no-await-in-loop
+      await deps.sleep(gui.pollIntervalMs);
+      let poll: CodexPoll;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        poll = await cdp.poll();
+        cdpFailures = 0;
+      } catch (e) {
+        if (!(e instanceof CdpDisconnectedError || e instanceof CdpUnavailableError)) throw e;
+        cdpFailures += 1;
+        if (cdpFailures > 5) throw e;
+        logger.warn(
+          `[codex] CDP 轮询失败（${cdpFailures}/5）：${e instanceof Error ? e.message : String(e)}；尝试重连当前页面`,
+        );
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await reconnectCdp();
+          logger.info("[codex] CDP 已重连当前页面，继续观察");
+        } catch (re) {
+          logger.warn(`[codex] CDP 重连失败：${re instanceof Error ? re.message : String(re)}`);
+        }
+        continue;
+      }
+      const verdict = judgeCodexPoll(poll, state, gui.stableRounds, gui.idleTimeoutMs, Date.now(), gui.stallTimeoutMs);
+      state = verdict.state;
+      if (Date.now() - lastProgress >= gui.progressIntervalMs) {
+        const note = `Codex 进度：${verdict.kind}；运行证据=${verdict.evidence}；对话哈希=${state.hash}；稳定轮=${state.stable}`;
+        await Promise.resolve(opts.onProgress?.(note)).catch(() => {});
+        logger.info(note);
+        lastProgress = Date.now();
+      }
+      if (verdict.kind === "needs_login")
+        return result({
+          endReason: "needs_user",
+          needsUserKind: "login_required",
+          pendingQuestion: "Codex 需要登录，请在窗口中完成登录后调用 continue_task 确认。",
+          session: { boundProjectPath: ctx.projectPath, model: spec.model, permissionMode: gui.defaultPermissionMode },
+        });
+      if (verdict.kind === "needs_user")
+        return result({
+          endReason: "needs_user",
+          needsUserKind: "user_confirmation",
+          pendingQuestion:
+            "Codex 停止按钮持续可见且对话内容长时间未变化，疑似在等待用户确认（方案确认/订阅确认等）。请在 Codex 窗口完成处理后调用 continue_task(taskId, message=已处理说明) 恢复；恢复后仅重新接入观察，不会发送消息。",
+          session: { boundProjectPath: ctx.projectPath, model: spec.model, permissionMode: gui.defaultPermissionMode },
+        });
+      if (verdict.kind === "idle_timeout")
+        return result({ endReason: "idle_timeout", error: "Codex 空闲超时；已停止 MCP 等待并保留现场" });
+      if (verdict.kind === "finished")
+        return {
+          ok: true,
+          exitCode: 0,
+          timeout: false,
+          killed: false,
+          durationMs: Date.now() - started,
+          logFile,
+          endReason: "reply_stable",
+          keptInstance: true,
+          session: { boundProjectPath: ctx.projectPath, model: spec.model, permissionMode: gui.defaultPermissionMode },
+          progressSummary: "Codex 已完成回复",
+        };
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.error(`[codex] 执行异常：${msg}${e instanceof Error && e.stack ? `\n${e.stack}` : ""}`);
+    if (e instanceof CdpDisconnectedError || e instanceof CdpUnavailableError)
+      return result({ hardFailure: true, error: msg, endReason: "cdp_disconnected" });
+    return result({ hardFailure: true, error: msg, endReason: "internal" });
+  } finally {
+    cdp?.disconnect();
+    await close();
+  }
+}
+
+function safeRefs(ctx: TaskContext): ReturnType<typeof validateTaskReferences> {
+  try {
+    return validateTaskReferences(ctx.task, ctx.context, ctx.projectPath);
+  } catch {
+    // 引用校验由 handler 预先拦截；此处仅用于拼装补充说明，失败不阻断
+    return [];
+  }
+}
+
+/**
+ * 尽力停止 GUI 内正在运行的 turn（issue #6）：
+ * 点击界面停止按钮（trusted 点击），并在 cancelWaitMs 内轮询确认停止按钮消失（GUI 空闲）。
+ * 不抛异常：CDP 不可用等情况下返回 clicked=false/idle=false，由调用方如实落文案。
+ * idle=false 时 GUI 内运行可能仍在继续——终态文案必须明示，不得谎报已停止。
+ */
+async function stopGuiTurn(
+  cdp: CodexCdpClient,
+  gui: GuiProfile,
+  deps: CodexRunDeps,
+  logger: AgentRunLogger,
+): Promise<{ clicked: boolean; idle: boolean }> {
+  try {
+    const first = await cdp.poll();
+    if (!first.stopVisible) return { clicked: false, idle: true };
+    const clicked = await cdp.click("stopButton");
+    logger.info(
+      `[codex] 取消：${clicked ? "已点击" : "未能点击"} GUI 停止按钮，等待界面空闲（≤${gui.cancelWaitMs}ms）`,
+    );
+    const deadline = Date.now() + gui.cancelWaitMs;
+    for (;;) {
+      await deps.sleep(500);
+      if (Date.now() >= deadline) return { clicked, idle: false };
+      const poll = await cdp.poll();
+      if (!poll.stopVisible) return { clicked, idle: true };
+    }
+  } catch (e) {
+    logger.warn(`[codex] 取消时停止 GUI 运行失败：${e instanceof Error ? e.message : String(e)}`);
+    return { clicked: false, idle: false };
+  }
+}
+
+/**
+ * 新建项目流程（截图 2→5）：
+ * 打开项目选择层 → 新建项目 → 点源文件夹中心空白区 → 原生对话框键盘填路径 →
+ * 确认源文件夹 → 点创建项目。任一步无法唯一定位即 fail-closed。
+ */
+async function createProject(
+  cdp: CodexCdpClient,
+  projectPath: string,
+  aumid: string | undefined,
+  gui: GuiProfile,
+  deps: CodexRunDeps,
+  logger: AgentRunLogger,
+): Promise<{ ok: boolean; error?: string }> {
+  // 新建会话后输入框会重渲染，触发器可能短暂缺席 —— 先等它出现再点。
+  if (!(await waitFor(cdp, "projectPickerTrigger", deps, 12_000)))
+    return {
+      ok: false,
+      error: "新建会话后未出现项目选择触发器（可用 gui.selectors.projectPickerTrigger 热修复）",
+    };
+  if (!(await cdp.click("projectPickerTrigger")))
+    return { ok: false, error: "项目选择触发器点击失败" };
+  if (!(await waitFor(cdp, "newProjectMenuItem", deps, 8_000)))
+    return { ok: false, error: "项目选择弹层未出现（找不到「新建项目」项）" };
+
+  const menu = await cdp.clickExact("newProjectMenuItem", "新建项目");
+  if (!menu.clicked)
+    return {
+      ok: false,
+      error: `无法唯一选择「新建项目」菜单项（匹配 ${menu.count}${menu.available.length ? `；可见候选=${menu.available.slice(0, 20).join("、")}` : ""}）`,
+    };
+  // 等「创建项目」对话框渲染完成，再点源文件夹；否则 trusted 点击会落空、不弹原生选择器
+  if (!(await waitFor(cdp, "sourceFolderArea", deps, 10_000)))
+    return { ok: false, error: "「创建项目」对话框未出现（找不到源文件夹按钮）" };
+
+  const pids = (await deps.listProcesses())
+    .filter((p) => !/--type=|crashpad/i.test(p.commandLine))
+    .map((p) => p.pid);
+  // 先清理残留原生对话框（上一轮失败可能留下，遮挡界面且会让本轮误判「无新对话框」）
+  const closed = await deps.closeDialogs(pids);
+  if (closed) logger.warn(`[codex] 已清理 ${closed} 个残留原生对话框`);
+  // 原生文件夹选择器只在应用窗口处于前台时弹出；无人值守下先用 COM 激活把窗口带到前台
+  // （SetForegroundWindow 会被前台锁拒绝，应用模型激活不会）。
+  const focused = aumid ? await deps.focusApp(aumid) : false;
+  logger.info(`[codex] 窗口置前：${focused ? "成功" : "未确认（继续尝试）"}`);
+  await deps.sleep(500);
+
+  // 点源文件夹 drop zone（截图明确：不要直接点「创建项目」）。
+  // 必须用 trusted 鼠标事件：DOM .click() 是 untrusted，应用会忽略而不弹原生对话框。
+  const baseline = await deps.listDialogs(pids);
+  if (!(await cdp.clickTrusted("sourceFolderArea")))
+    return { ok: false, error: "无法触发「源文件夹」点击（元素不可见或落点被遮挡）" };
+  await deps.sleep(1500);
+
+  const selected = await deps.selectFolder(projectPath, pids, baseline);
+  if (!selected.ok) return { ok: false, error: `原生文件夹对话框驱动失败：${selected.message}` };
+  logger.info("[codex] 原生文件夹对话框已提交，等待创建项目对话框回填");
+  await deps.sleep(1000);
+
+  // 确认源文件夹已挂上目标目录（读整个对话框文本，比读单个区域更稳）
+  const srcText = await cdp.createProjectDialogText();
+  if (!srcText.toLocaleLowerCase().includes(projectBasename(projectPath).toLocaleLowerCase()))
+    return { ok: false, error: `源文件夹未回填目标目录（对话框文本「${srcText.slice(0, 120)}」）` };
+
+  const created = await cdp.clickExact("createProjectButton", "创建项目");
+  if (!created.clicked)
+    return { ok: false, error: `无法点击「创建项目」（匹配 ${created.count}）` };
+  logger.info(`[codex] 已创建项目：${projectBasename(projectPath)}`);
+  return { ok: true };
+}
+
+/** 选择模型与思考等级，并回读校验 */
+async function ensureModelAndLevel(
+  cdp: CodexCdpClient,
+  spec: ReturnType<typeof parseCodexModel>,
+  gui: GuiProfile,
+  deps: CodexRunDeps,
+  logger: AgentRunLogger,
+): Promise<{ ok: boolean; error?: string; endReason?: string }> {
+  // 新建会话/切换项目后输入框工具条会重渲染，刚绑定时模型 chip 可能短暂为空；
+  // 先等回读稳定，避免把「正在渲染」误判成「模型不符」而多余地翻菜单（甚至失败）。
+  let triggerValue = parseTriggerValue(await waitStableTrigger(cdp, deps, 6_000));
+  const matches = (): boolean =>
+    exactUiName(triggerValue.model, spec.model) &&
+    (!spec.level || triggerValue.level === spec.level);
+  if (matches()) {
+    logger.info(`[codex] 模型/等级回读已匹配，复用 ${triggerValue.model}${triggerValue.level ? ` ${triggerValue.level}` : ""}`);
+    return { ok: true };
+  }
+  if (!gui.modelSwitch) {
+    logger.warn("[codex] profile.gui.modelSwitch=false，忽略指定模型");
+    return { ok: true };
+  }
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await cdp.click("modelTrigger")))
+      return { ok: false, error: "无法打开 Codex 模型菜单", endReason: "setup_failed" };
+    // 菜单展开动画
+    // eslint-disable-next-line no-await-in-loop
+    await deps.sleep(900);
+
+    // ---- 模型：菜单项为 menuitemradio，按可见文本精确选择 ----
+    if (!exactUiName(triggerValue.model, spec.model)) {
+      // eslint-disable-next-line no-await-in-loop
+      const model = await cdp.clickModelItem(spec.model);
+      if (!model.clicked)
+        return {
+          ok: false,
+          endReason: "model_unavailable",
+          error: `模型不存在或同名歧义：${spec.model}（匹配 ${model.count}${model.available.length ? `；可见候选=${model.available.slice(0, 20).join("、")}` : ""}）`,
+        };
+      // eslint-disable-next-line no-await-in-loop
+      await deps.sleep(700);
+    }
+
+    // ---- 思考强度：真机实测是滑块（不是菜单项），用方向键调到目标档位 ----
+    if (spec.level) {
+      const target = LEVEL_SLIDER_STOP[spec.level];
+      // eslint-disable-next-line no-await-in-loop
+      const set = await cdp.setReasoningSlider(target);
+      if (!set.ok)
+        return {
+          ok: false,
+          endReason: "model_unavailable",
+          error: `无法把思考强度滑块调到「${spec.level}」（期望档位 ${target}，实际 ${set.value ?? "未读到"}）；请确认模型菜单已展开且含强度滑块`,
+        };
+      logger.info(`[codex] 思考强度滑块已设为 ${spec.level}（档位 ${set.value}）`);
+      // eslint-disable-next-line no-await-in-loop
+      await deps.sleep(400);
+    }
+
+    // 菜单选择后 UI 会重渲染：先关菜单再回读触发器文本
+    // eslint-disable-next-line no-await-in-loop
+    await cdp.pressEscape();
+    // eslint-disable-next-line no-await-in-loop
+    await deps.sleep(500);
+    // eslint-disable-next-line no-await-in-loop
+    triggerValue = parseTriggerValue(await waitStableTrigger(cdp, deps, 5_000));
+    if (matches()) return { ok: true };
+  }
+  const finalValue = parseTriggerValue(await waitStableTrigger(cdp, deps, 4_000));
+  return {
+    ok: false,
+    endReason: "model_mismatch",
+    error: `模型/等级切换回读不一致：期望 ${spec.model}${spec.level ? ` ${spec.level}` : ""}，实际 ${finalValue.model}${finalValue.level ? ` ${finalValue.level}` : ""}`,
+  };
+}
+
+/**
+ * 思考强度滑块档位映射（真机实测 26.903.x，aria-valuemin=0 / max=4）：
+ *   0=轻度 1=中 2=高 3=极高 4=极高
+ * 归一等级 → 官方档位（高=2，与界面「高」标签一致）。
+ */
+const LEVEL_SLIDER_STOP: Record<NormalizedLevel, number> = { low: 0, medium: 1, high: 2 };
+
+/**
+ * 等待模型触发器回读稳定：UI 重渲染期间可能出现空文本，连续两次读到相同的非空值才返回。
+ * 超时则返回最后一次读到的值（由调用方判定是否匹配）。
+ */
+async function waitStableTrigger(
+  cdp: CodexCdpClient,
+  deps: CodexRunDeps,
+  timeoutMs: number,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  let last = "";
+  let stableHits = 0;
+  while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    const text = (await cdp.modelTriggerText()).trim();
+    if (text && text === last) {
+      stableHits += 1;
+      if (stableHits >= 1) return text;
+    } else {
+      stableHits = 0;
+    }
+    last = text;
+    // eslint-disable-next-line no-await-in-loop
+    await deps.sleep(250);
+  }
+  return last;
+}
+
+/** 强制权限模式（决策 5：完全访问） */
+async function ensurePermission(
+  cdp: CodexCdpClient,
+  gui: GuiProfile,
+  deps: CodexRunDeps,
+  logger: AgentRunLogger,
+): Promise<{ ok: boolean; error?: string }> {
+  const target = gui.permissionMode || gui.defaultPermissionMode;
+  if (!target) return { ok: true };
+  // 真机实测：权限 chip 只在会话/项目就绪后才渲染；缺失说明该界面未暴露权限控制，
+  // 不是「权限错误」。此时跳过强制（fail-open）并告警，避免误判为硬失败。
+  if (!(await cdp.exists("permissionTrigger"))) {
+    logger.warn(`[codex] 未发现权限触发器，跳过「${target}」强制（界面未暴露权限控制）`);
+    return { ok: true };
+  }
+  const current = await cdp.permissionText();
+  if (exactUiName(current, target)) {
+    logger.info(`[codex] 权限回读已匹配，复用 ${target}`);
+    return { ok: true };
+  }
+  if (!(await cdp.click("permissionTrigger")))
+    return { ok: false, error: "无法打开 Codex 权限菜单" };
+  await deps.sleep(350);
+  for (const text of [target, "完全访问", "Full access"]) {
+    // eslint-disable-next-line no-await-in-loop
+    const hit = await cdp.clickExact("permissionOption", text);
+    if (hit.clicked) {
+      // eslint-disable-next-line no-await-in-loop
+      await deps.sleep(350);
+      // eslint-disable-next-line no-await-in-loop
+      const after = await cdp.permissionText();
+      if (exactUiName(after, target)) return { ok: true };
+    }
+  }
+  return { ok: false, error: `无法将 Codex 权限切换为「${target}」` };
+}
