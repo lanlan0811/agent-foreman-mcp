@@ -1,6 +1,8 @@
 /**
- * 技能自检安装（开发计划 §17.5 / D19）：server 启动后幂等同步
- * 仓库 skills/agent-foreman-mcp/ → ~/.rivet/skills/agent-foreman-mcp/（os.homedir() 动态解析）。
+ * 技能自检安装（D8）：server 启动后幂等同步
+ * 仓库 skills/agent-foreman-mcp/ → ~/.agents/skills/agent-foreman-mcp/（os.homedir() 动态解析）。
+ *
+ * 目标采用 Agents Skills 开放标准（用户级 ~/.agents/skills/），不再使用任何宿主专属目录。
  * 目标已存在且内容 hash 一致 → skip；不一致 → 备份 .bak-<ts> 后覆盖。
  * 失败仅告警不阻断 server。
  */
@@ -38,7 +40,7 @@ export function resolveSkillSourceDir(): string {
 }
 
 export function resolveSkillDestDir(): string {
-  return path.join(os.homedir(), ".rivet", "skills", SKILL_NAME);
+  return path.join(os.homedir(), ".agents", "skills", SKILL_NAME);
 }
 
 function copyDir(src: string, dest: string): void {
@@ -74,16 +76,20 @@ function hashDir(dir: string): string {
   return h.digest("hex");
 }
 
-/** 幂等安装；返回 { installed | skipped | failed, destDir, message } */
-export async function skillSelfInstall(logger: Logger): Promise<{
+/** 幂等安装；返回 { installed | skipped | failed, destDir, message }
+ *  opts.sourceDir / opts.destDir 仅供测试注入隔离路径；生产路径始终走 homedir 解析。 */
+export async function skillSelfInstall(
+  logger: Logger,
+  opts: { sourceDir?: string; destDir?: string } = {},
+): Promise<{
   installed: boolean;
   skipped: boolean;
   failed: boolean;
   destDir: string;
   message: string;
 }> {
-  const src = resolveSkillSourceDir();
-  const dest = resolveSkillDestDir();
+  const src = opts.sourceDir ?? resolveSkillSourceDir();
+  const dest = opts.destDir ?? resolveSkillDestDir();
   try {
     if (!fs.existsSync(src)) {
       const msg = `技能源目录不存在（${src}），跳过安装。`;

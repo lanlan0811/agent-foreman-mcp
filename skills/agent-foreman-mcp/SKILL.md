@@ -29,7 +29,7 @@ triggers: '开发|编码|写代码|改代码|实现功能|加功能|修复|重�
 ## 何时不要用（边界）
 
 - 小改动 / 纯问答 / 只读代码分析：不需要本技能与 MCP，直接做。
-- 本 MCP 未连接：工具面里看不到 `mcp__tianshu-mcp__*` 时，先提示用户按天枢 `config.json → mcp.servers.tianshu-mcp` 接入（见项目 docs/tianshu-integration.md），**不要空转**，更不要假装调用。
+- 本 MCP 未连接：工具面里看不到本 server 的工具时，先提示用户按自己的宿主配置接入（通用 stdio `mcpServers` 片段与各宿主示例见项目 `docs/host-integration.md`；工具前缀形如 `mcp__<server-id>__run_task`，server ID 以宿主实际配置为准），**不要空转**，更不要假装调用。
 
 ## 1. 选 agent（默认均为 GUI 驱动：CDP 控制桌面端，非 CLI）
 
@@ -98,23 +98,23 @@ meta 块中 `needsUserKind` 给出等待类型、`pendingQuestion` 给出问题�
 
 ## 6. 验收报告解读要点
 
-- 除 `get_task_report`（直接返回报告 Markdown 原文）外，其余工具结果文本末尾都带 `---tianshu-mcp-meta---` 块（JSON），天枢可正则抽取；字段全表见 usage-examples.md。
+- 除 `get_task_report`（直接返回报告 Markdown 原文）外，其余工具结果文本末尾都带 `---agent-foreman-meta---` 块（JSON），MCP 宿主可正则抽取；**同一份 meta 也作为 MCP 标准 `structuredContent` 返回**，现代宿主可直接消费结构化字段、无需解析文本；字段全表见 usage-examples.md。
 - 报告全文走 `get_task_report(taskId, round?)`：`checks[]`（每项 PASS/FAIL/SKIP + 输出尾部）、`analysis`（变更清单、diffstat、可疑标记命中计数、超大单文件改动告警）、以及在启用视觉时的独立 `visual` 段落。`round` 为 0-based 报告轮次，缺省取最新；显式 `round: 0` 合法。
 - `verify_task` 可对任务或任意项目独立验收（**不改源码、无需审批**）：`taskId` / `projectPath` 二选一；`extraChecks` 临时加验（`checksMode` 默认 append 追加，`replace` 才替换）；`baselineRef` 可填任务 ID（用该任务动工前基线）或 git ref（如 `HEAD~1`）；独立 projectPath 不设 baselineRef 时按当前基线做健康检查。对任务 ID 验收只更新其验收结论字段（`latestVerificationVerdict`），**不改写原任务终态**；独立 projectPath 且遇配置/视觉阻塞时，独立 vfy 记录落 `needs_attention`。
-- 验收命令优先级：`extraChecks` > 项目 `.tianshu-mcp/acceptance.json` > projects.json 管理员补录 > 按技术栈推导的默认集。
-- **检查项默认并行 2 条**（`verifyConcurrency`，范围 1–4，v0.4.0 起；此前为串行）。项目级 `.tianshu-mcp/acceptance.json` 可覆盖。若 checks 之间有顺序依赖（后续读 build 产物、带 `--fix`、共享缓存目录），需把 `verifyConcurrency` 显式设为 `1` 退化为串行，否则会偶发误报。
-- `requireChanges` 门禁：项目配置默认开启——相对动工前基线**零变更**会被判失败（防止 agent"什么都没做却报成功"）。纯只读/纯排查类任务要在 `.tianshu-mcp/acceptance.json` 设 `requireChanges: false`，否则必然失败。
+- 验收命令优先级：`extraChecks` > 项目 `.agent-foreman/acceptance.json` > projects.json 管理员补录 > 按技术栈推导的默认集。
+- **检查项默认并行 2 条**（`verifyConcurrency`，范围 1–4，v0.4.0 起；此前为串行）。项目级 `.agent-foreman/acceptance.json` 可覆盖。若 checks 之间有顺序依赖（后续读 build 产物、带 `--fix`、共享缓存目录），需把 `verifyConcurrency` 显式设为 `1` 退化为串行，否则会偶发误报。
+- `requireChanges` 门禁：项目配置默认开启——相对动工前基线**零变更**会被判失败（防止 agent"什么都没做却报成功"）。纯只读/纯排查类任务要在 `.agent-foreman/acceptance.json` 设 `requireChanges: false`，否则必然失败。
 - 注意：代码分析是确定性规则（TODO/FIXME、console.log/debugger、疑似密钥形态、超大改动），**不是** LLM 评审——命中仅提示人工，不等同于任务失败。
 - changedFiles/diffstat 都相对**动工前 git 基线**（run_task 自动采集，含未跟踪新增）。MCP 不自动 commit/stash；需要回滚时由用户基于报告决定。
 
 ## 7. 视觉验收与基准保护
 
-项目在 `.tianshu-mcp/acceptance.json` 配置 `visual` 且 `enabled: true` 后，`run_task`/`verify_task` 自动带上截图对比与静态图片规格检查，**不需要新工具**。
+项目在 `.agent-foreman/acceptance.json` 配置 `visual` 且 `enabled: true` 后，`run_task`/`verify_task` 自动带上截图对比与静态图片规格检查，**不需要新工具**。
 
 - 验收结论：视觉缺陷（布局差异、图片规格错误、可定位的交互失败）按 `autoFixRounds` 返修；视觉阻塞（缺基准、页面不可达、浏览器缺失、资源被策略拦截、截图不稳定）进 `needs_attention`，**不触发 agent 返修**——`rework_task` 会先只重新验收，不启动 agent、不额外消耗返修轮次，通过即结束，仍阻塞则回到 `needs_attention`。
 - 读 `get_task_report` 的 `visual` 段落与 `files.html` 离线报告（图片并排、透明叠加、区域定位）。返修时报告会给出检查 ID、路由/文件、视口、预期与实际指标、差异区域及证据路径。
 - **基准必须由用户审阅批准**：`prepare_visual_baseline` 只生成候选（返回 candidateId/digest/preview），`approve_visual_baseline` 只能在用户查看候选并明确授权后调用，且必须带 `expectedDigest` 与 `approvalNote`。缺基准只能生成候选、**不能判视觉通过**。
-- **禁止绕过**：不得为通过而修改基准、阈值、屏蔽区域或关闭规则——规则冻结会检出并报 `VISUAL_INTEGRITY`；配置或基准变化需用 `tianshu-mcp visual rules review/approve` 重建任务快照（CLI 在 stdio 前分流）。
+- **禁止绕过**：不得为通过而修改基准、阈值、屏蔽区域或关闭规则——规则冻结会检出并报 `VISUAL_INTEGRITY`；配置或基准变化需用 `agent-foreman-mcp visual rules review/approve` 重建任务快照（CLI 在 stdio 前分流）。
 - **自动返修禁止调用批准入口**；两个工具都是有副作用的 `write` 操作，宿主必须实施实际授权控制（审批标注不能替代）。
 - 阻塞处理流程：先处理环境或完成审批，再 `rework_task`（系统先重新验收，通过后无需启动 agent）。
 
@@ -122,12 +122,12 @@ meta 块中 `needsUserKind` 给出等待类型、`pendingQuestion` 给出问题�
 
 `visual.contents[]`（图片内容规则）与 `pages[].content`（页面语义校验）可选启用，校验图片/截图**内容**是否符合用户显式声明的期望描述。
 
-- **凭证零管理**：判定完全委托用户自备的本地命令，判定命令自己管密钥；MCP 不读取/存储/转发任何凭证、不实现模型客户端。要启用它，需项目在 `.tianshu-mcp/acceptance.json` 配好 `visual.content.command` 与 `argsTemplate`（占位符 `<image:path>` / `<expect:file>` / `<image:base64:file>`），并先用 `tianshu-mcp visual content probe <project> [ruleId]` 验证命令可用。
+- **凭证零管理**：判定完全委托用户自备的本地命令，判定命令自己管密钥；MCP 不读取/存储/转发任何凭证、不实现模型客户端。要启用它，需项目在 `.agent-foreman/acceptance.json` 配好 `visual.content.command` 与 `argsTemplate`（占位符 `<image:path>` / `<expect:file>` / `<image:base64:file>`），并先用 `agent-foreman-mcp visual content probe <project> [ruleId]` 验证命令可用。
 - **默认仅告警**：内容项 `blocking:false` 时映射为 `optional:true`，不改变验收结论、不触发返修。整轮消息会出现「AI 内容判定不确定（仅告警）」或「AI 内容告警未通过（不影响结论）」，报告与返修计划另有「仅告警项（不必修复）」小节——**不要为消除告警而伪造产物或放宽检查**。
 - **只有 `blocking:true` 才致败**，此时 `CONTENT_MISMATCH` 进入返修计划第 2 节「必须修复」。
 - **整轮阻塞**：任一规则的**有效**命令不可解析（`CONTENT_COMMAND_MISSING`）或声明的宿主环境变量缺失（`CONTENT_ENV_MISSING`）会让整轮进 `needs_attention`，且**不产出任何视觉结果行**。这是 fail-closed，不是可忽略的告警——先修配置或环境，再 `rework_task`。
 - **`uncertain` 不是失败**：票不集中或低于 `minConfidence` 时判 `uncertain`，永不阻塞、不触发返修；要让判定稳定可提高 `samples` 或让命令输出更一致。`minConfidence` 在命令不报 confidence 时不生效。
-- 排查：`tianshu-mcp visual doctor <project>` 列出每条有效命令的解析结果与 `allowRemote` 声明，并给出多规则总预算建议；`tianshu-mcp visual content cache clear <taskId>` 清理任务级判定缓存。
+- 排查：`agent-foreman-mcp visual doctor <project>` 列出每条有效命令的解析结果与 `allowRemote` 声明，并给出多规则总预算建议；`agent-foreman-mcp visual content cache clear <taskId>` 清理任务级判定缓存。
 - **数据外发**：`allowRemote` 默认 `false`，未放行的规则禁止使用字节外传占位符；图片是否离开本机取决于用户命令的行为，MCP 无法在系统层拦截。
 
 Visual acceptance reuses the existing task tools with independent evidence. Never weaken baselines, thresholds, masks or enabled rules to bypass failures; baseline approval requires explicit user review and authorization, and automatic repair must never approve candidates. Resolve blockers before `rework_task`, which verifies first. Optional AI content validation (v0.5.4) delegates judgement to a user-supplied command, warns only by default, and never lets an `uncertain` or warning item fail a round; only `blocking: true` rules do.
@@ -161,7 +161,7 @@ Visual acceptance reuses the existing task tools with independent evidence. Neve
 - 写/执行类工具（`run_task` / `cancel_task` / `rework_task` / `continue_task` / `prepare_visual_baseline` / `approve_visual_baseline`）需审批：不绕过、不替用户代点同意；`query_task` / `list_tasks` / `get_task_report` / `verify_task` / `get_profiles` 为只读，无需审批。
 - 不代替外部 agent 手改项目代码；不改用户 git 历史；不读取/转发任何 agent 密钥（登录态各 agent 自持）。
 - 验收命令来自白名单式配置、按 argv 分词执行，不做 shell 注入。
-- 本技能由 server 启动时幂等同步到 `~/.rivet/skills/tianshu-mcp/`（内容 hash 变化才覆盖，旧文件备份为 `.bak-<时间戳>`）；改技能以本仓库 `skills/` 为准。
+- 本技能由 server 启动时幂等同步到 `~/.agents/skills/agent-foreman-mcp/`（内容 hash 变化才覆盖，旧文件备份为 `.bak-<时间戳>`）；改技能以本仓库 `skills/` 为准。
 
 ## 快速上手清单
 

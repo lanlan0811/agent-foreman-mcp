@@ -1,4 +1,4 @@
-# tianshu-mcp 使用示例（子文件）
+# agent-foreman-mcp 使用示例（子文件）
 
 正文过长方法论不背：任务书模板、四种 agent 派活示例、meta 块字段全表、错误码速查、验收与返修模板、视觉验收与基准保护、needs_user/取消示例都在这里，按需用读取文件工具查看。
 
@@ -124,7 +124,7 @@ run_task(projectPath=D:/repo/app, agentId=traework,
 
 ### 2.4 codex-cli（用户自建 profile；无头路径，无 GUI）
 
-内置 `codex` 走桌面 GUI 驱动。不想依赖 GUI 自动化（或需要可复现的 CI 式无头执行）时，在数据目录 `~/.tianshu-mcp/agent-profiles.json` 加一个 `driver=spawn` 的 profile，示例见 README「macOS 无头路径：codex-cli」。之后按普通 agent 派活：
+内置 `codex` 走桌面 GUI 驱动。不想依赖 GUI 自动化（或需要可复现的 CI 式无头执行）时，在数据目录 `~/.agent-foreman/agent-profiles.json` 加一个 `driver=spawn` 的 profile，示例见 README「macOS 无头路径：codex-cli」。之后按普通 agent 派活：
 
 ```text
 run_task(projectPath=/path/to/项目, agentId=codex-cli,
@@ -146,8 +146,10 @@ run_task(projectPath=/path/to/项目, agentId=codex-cli,
 
 `run_task` / `query_task` / `verify_task` 等结果文本末尾的结构化块（**例外**：`get_task_report` 直接返回报告 Markdown 原文，不带 meta 块）：
 
+> **双轨返回**：同一份字段既作为文本 meta 块投递（供正则抽取），也作为 MCP 标准 `structuredContent` 返回（供现代宿主直接消费结构化 JSON，无需解析文本）。两者**内容同源**，选一种用即可。工具已声明 `outputSchema`，字段名稳定且只增不改。
+
 ```text
----tianshu-mcp-meta---
+---agent-foreman-meta---
 {
   "ok": false,
   "taskId": "tsk_20260907120000_a1b2c3",
@@ -165,7 +167,7 @@ run_task(projectPath=/path/to/项目, agentId=codex-cli,
   "verificationSource": "auto",
   "message": "验收失败，自动返修轮次已用尽（3/5 轮）。…"
 }
----tianshu-mcp-meta---
+---agent-foreman-meta---
 ```
 
 读法（按决策用途分组）：
@@ -244,18 +246,18 @@ verify_task(projectPath=D:/repo/app, baselineRef=HEAD~1,
 
 - `checksMode=replace` 时只用 `extraChecks`，不跑项目基础集。
 - `extraChecks` 单条支持 `name`/`cmd`（argv 数组或字符串）/`timeoutMs`/`optional`（optional:true 失败只记 warning）。
-- 验收命令优先级：extraChecks > 项目 `.tianshu-mcp/acceptance.json` > projects.json 管理员补录 > 按技术栈推导的默认集（详见 docs/acceptance-config.md）。
+- 验收命令优先级：extraChecks > 项目 `.agent-foreman/acceptance.json` > projects.json 管理员补录 > 按技术栈推导的默认集（详见 docs/acceptance-config.md）。
 
 ### 5.1 项目级验收配置模板（写进目标项目仓库）
 
-`<目标项目>/.tianshu-mcp/acceptance.json`：
+`<目标项目>/.agent-foreman/acceptance.json`：
 
 ```jsonc
 {
   // 默认 true：git 项目相对动工前基线零变更即判失败（防"什么都没做却报成功"）
   "requireChanges": true,
   // 命令检查并行度 1-4，缺省继承 server 的 verifyConcurrency（默认 2）
-  // ⚠ checks 之间有顺序依赖（读 build 产物 / 带 --fix / 共享缓存）时必须设 1
+  // 注意：checks 之间有顺序依赖（读 build 产物 / 带 --fix / 共享缓存）时必须设 1
   "verifyConcurrency": 1,
   "checks": [
     { "name": "typecheck", "cmd": ["npm", "run", "typecheck"], "timeoutMs": 120000 },
@@ -274,7 +276,7 @@ verify_task(projectPath=D:/repo/app, baselineRef=HEAD~1,
 
 ### 5.2 视觉验收与基准保护
 
-项目在 `.tianshu-mcp/acceptance.json` 里配置 `visual` 且 `enabled: true` 后，`run_task`/`verify_task` 会自动带上截图对比与静态图片规格检查。**不需要新工具**；读 `get_task_report` 的 visual 段落与离线 HTML 即可看到指标、差异区域与证据。
+项目在 `.agent-foreman/acceptance.json` 里配置 `visual` 且 `enabled: true` 后，`run_task`/`verify_task` 会自动带上截图对比与静态图片规格检查。**不需要新工具**；读 `get_task_report` 的 visual 段落与离线 HTML 即可看到指标、差异区域与证据。
 
 ```text
 # 视觉阻塞（缺基准 / 页面不可达 / 资源被拦）→ needs_attention，等待用户处理
@@ -296,10 +298,10 @@ approve_visual_baseline(candidateId=<uuid>, expectedDigest=<sha256>,
 - 两个工具都是 `write` + 需宿主审批的有副作用操作；**自动返修禁止调用批准入口**。
 - 缺基准只能生成候选，**不能判视觉通过**；候选被改、原基准变化、跨项目候选都会拒绝。
 - 不要为了通过而修改基准、阈值、屏蔽区域或关闭规则——会被规则冻结检测拦截并报 `VISUAL_INTEGRITY`。
-- 配置或基准变化时用 `tianshu-mcp visual rules review/approve` 建立新的任务快照（CLI 在 stdio 前分流）。
+- 配置或基准变化时用 `agent-foreman-mcp visual rules review/approve` 建立新的任务快照（CLI 在 stdio 前分流）。
 - 视觉缺陷返修时，报告会给出检查 ID、路由/文件、视口、预期与实际指标、差异区域及证据路径。
 - 报告 `visual.results[]` 每项 status 为 `passed`/`failed`/`blocked`/`skipped`，并带 `optional`、稳定原因码 `code`、`repairable` 与产物路径；禁用视觉时整个 `visual` 字段省略（旧报告仍可读）。
-- CLI 辅助命令：`tianshu-mcp visual init|doctor [project]`、`visual browser install`、`visual artifacts clean <taskId> [--apply]`（默认只预览）。
+- CLI 辅助命令：`agent-foreman-mcp visual init|doctor [project]`、`visual browser install`、`visual artifacts clean <taskId> [--apply]`（默认只预览）。
 
 ## 6. 查历史：list_tasks 示例
 
