@@ -106,7 +106,7 @@ export function normalizeDir(value: string, platform: NodeJS.Platform = process.
 /** 默认专属 profile 目录（不硬编码用户名/盘符） */
 export function defaultUserDataDir(): string {
   if (process.platform === "win32")
-    return expandEnvPath("{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile");
+    return expandEnvPath("{LOCALAPPDATA}/agent-foreman/codex-gui/profile");
   return expandEnvPath("{HOME}/.agent-foreman/codex-gui/profile");
 }
 

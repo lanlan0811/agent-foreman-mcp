@@ -26,6 +26,7 @@ import {
   pickCodexPage,
 } from "../../src/agents/codex/instance.js";
 import { buildActivationArgs, buildSpawnArgs, ACTIVATION_CSHARP } from "../../src/agents/codex/launcher.js";
+import { LEGACY_CODEX_BACKUP_SUFFIX } from "../../src/agents/codex/registry.js";
 import {
   matchCodexProject,
   projectBasename,
@@ -554,25 +555,25 @@ describe("Codex 提示词与修复计划", () => {
   it("修复计划文件名含轮次号、每轮独立（决策 12）", () => {
     expect(fixPlanFileName(1)).toBe("codex-fix-r1.md");
     expect(fixPlanFileName(5)).toBe("codex-fix-r5.md");
-    expect(fixPlanRelPath(undefined, 3)).toBe(".zcode/plans/codex-fix-r3.md");
+    expect(fixPlanRelPath(undefined, 3)).toBe(".agent-foreman/plans/codex-fix-r3.md");
     expect(fixPlanRelPath("docs/plans/", 2)).toBe("docs/plans/codex-fix-r2.md");
   });
 
   it("修复指令引用 MCP 生成的计划文档路径", () => {
     const p = buildFixPrompt({
       summary: "未通过检查: test",
-      planRelPath: ".zcode/plans/codex-fix-r1.md",
+      planRelPath: ".agent-foreman/plans/codex-fix-r1.md",
       reportPath: "/data/report-0.md",
       evidence: "$ npm test\nexit=1",
     });
-    expect(p).toContain(".zcode/plans/codex-fix-r1.md");
+    expect(p).toContain(".agent-foreman/plans/codex-fix-r1.md");
     expect(p).toContain("未通过检查: test");
     expect(p).toContain("$ npm test");
   });
 
   it("fixPlanAbsPath 落在项目内约定目录", () => {
     const abs = fixPlanAbsPath(path.join("C:", "proj"), undefined, 1);
-    expect(abs).toBe(path.join("C:", "proj", ".zcode", "plans", "codex-fix-r1.md"));
+    expect(abs).toBe(path.join("C:", "proj", ".agent-foreman", "plans", "codex-fix-r1.md"));
   });
 
   const report = makeReport;
@@ -588,7 +589,7 @@ describe("Codex 提示词与修复计划", () => {
       report: report(true),
       logger: silentLogger,
     });
-    expect(res.relPath).toBe(".zcode/plans/codex-fix-r1.md");
+    expect(res.relPath).toBe(".agent-foreman/plans/codex-fix-r1.md");
     expect(fs.existsSync(res.absPath)).toBe(true);
     const md = fs.readFileSync(res.absPath, "utf8");
     expect(md).toContain("第 1 轮返修");
@@ -811,10 +812,10 @@ describe("Codex 注册表接入", () => {
     expect(codex.gui?.userDataDir).toBe(
       darwin
         ? "{HOME}/.agent-foreman/codex-gui/profile"
-        : "{LOCALAPPDATA}/agent-foreman-mcp/codex-gui/profile",
+        : "{LOCALAPPDATA}/agent-foreman/codex-gui/profile",
     );
     expect(codex.gui?.permissionMode).toBe("完全访问");
-    expect(codex.gui?.fixPlanDir).toBe(".zcode/plans");
+    expect(codex.gui?.fixPlanDir).toBe(".agent-foreman/plans");
     expect(codex.gui?.defaultAutoFixRounds).toBe(5);
     expect(codex.executableDiscovery?.appxPackageName).toBe("OpenAI.Codex");
   });
@@ -839,7 +840,7 @@ describe("Codex run 配置归一", () => {
     expect(gui.activation).toBe(process.platform === "darwin" ? "spawn" : "msix-com");
     expect(gui.permissionMode).toBe("完全访问");
     expect(gui.defaultAutoFixRounds).toBe(5);
-    expect(gui.fixPlanDir).toBe(".zcode/plans");
+    expect(gui.fixPlanDir).toBe(".agent-foreman/plans");
   });
 });
 
@@ -922,6 +923,70 @@ describe("Codex 项目登记", () => {
     expect(after["project-order"][0]).toBe(r.projectId);
     expect(after["project-order"]).toContain("existing");
     expect(fs.existsSync(`${stateFile}.agent-foreman-backup.json`)).toBe(true);
+    // D13 方案 A：旧品牌后缀不应被同时创建（新后缀已存在即唯一事实）
+    expect(fs.existsSync(`${stateFile}${LEGACY_CODEX_BACKUP_SUFFIX}`)).toBe(false);
+    await rmrf(root);
+  });
+
+  /* ---------- D13 方案 A：旧备份后缀兼容识别（改新后缀但不毁老用户回滚点） ---------- */
+
+  it("D13① 旧后缀备份已存在时不新建新后缀备份（保住干净回滚点）", async () => {
+    const { ensureProjectRegistered } = await import("../../src/agents/codex/registry.js");
+    const root = await makeTmpRoot("codex-d13-legacy");
+    const stateFile = path.join(root, "state.json");
+    fs.writeFileSync(stateFile, JSON.stringify(stateWith({})), "utf8");
+    // 模拟从 tianshu-mcp 切换过来的用户：磁盘上已有旧后缀备份
+    const legacyBackup = `${stateFile}${LEGACY_CODEX_BACKUP_SUFFIX}`;
+    fs.writeFileSync(legacyBackup, '{"legacy":"untouched"}', "utf8");
+
+    const r = await ensureProjectRegistered(path.join(root, "p1"), {} as never, silentLogger, {
+      stateFile,
+      platform: "win32",
+      stopInstances: () => {},
+    });
+    expect(r.status).toBe("performed");
+    // 不新建新后缀备份
+    expect(fs.existsSync(`${stateFile}.agent-foreman-backup.json`)).toBe(false);
+    // 旧备份内容原样未动
+    expect(fs.readFileSync(legacyBackup, "utf8")).toBe('{"legacy":"untouched"}');
+    await rmrf(root);
+  });
+
+  it("D13② 新旧后缀皆不存在时新建新后缀备份", async () => {
+    const { ensureProjectRegistered } = await import("../../src/agents/codex/registry.js");
+    const root = await makeTmpRoot("codex-d13-none");
+    const stateFile = path.join(root, "state.json");
+    fs.writeFileSync(stateFile, JSON.stringify(stateWith({})), "utf8");
+
+    const r = await ensureProjectRegistered(path.join(root, "p2"), {} as never, silentLogger, {
+      stateFile,
+      platform: "win32",
+      stopInstances: () => {},
+    });
+    expect(r.status).toBe("performed");
+    expect(fs.existsSync(`${stateFile}.agent-foreman-backup.json`)).toBe(true);
+    expect(fs.existsSync(`${stateFile}${LEGACY_CODEX_BACKUP_SUFFIX}`)).toBe(false);
+    await rmrf(root);
+  });
+
+  it("D13③ 新旧后缀皆存在时不覆盖任一份", async () => {
+    const { ensureProjectRegistered } = await import("../../src/agents/codex/registry.js");
+    const root = await makeTmpRoot("codex-d13-both");
+    const stateFile = path.join(root, "state.json");
+    fs.writeFileSync(stateFile, JSON.stringify(stateWith({})), "utf8");
+    const newBackup = `${stateFile}.agent-foreman-backup.json`;
+    const legacyBackup = `${stateFile}${LEGACY_CODEX_BACKUP_SUFFIX}`;
+    fs.writeFileSync(newBackup, '{"new":"keep"}', "utf8");
+    fs.writeFileSync(legacyBackup, '{"legacy":"keep"}', "utf8");
+
+    const r = await ensureProjectRegistered(path.join(root, "p3"), {} as never, silentLogger, {
+      stateFile,
+      platform: "win32",
+      stopInstances: () => {},
+    });
+    expect(r.status).toBe("performed");
+    expect(fs.readFileSync(newBackup, "utf8")).toBe('{"new":"keep"}');
+    expect(fs.readFileSync(legacyBackup, "utf8")).toBe('{"legacy":"keep"}');
     await rmrf(root);
   });
 

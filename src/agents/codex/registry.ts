@@ -11,7 +11,8 @@
  * 安全约束（fail-closed → 失败即回退到界面路径，绝不破坏用户状态）：
  *  - 仅在 Windows 且状态文件存在、可解析时生效；
  *  - **幂等**：已存在同路径登记则直接返回，不写文件；
- *  - 写入前**备份**（`.agent-foreman-backup.json`，只在不存在时创建，避免覆盖良好备份）；
+ *  - 写入前**备份**（`.agent-foreman-backup.json`，只在不存在时创建，避免覆盖良好备份；
+ *    D13 方案 A：上一代品牌的后缀同样视为「已存在」，见 LEGACY_CODEX_BACKUP_SUFFIX）；
  *  - **原子写**（临时文件 + rename），只改 `local-projects` / `project-order` 两个键，
  *    其余键原样保留；
  *  - 只在**本 MCP 受管实例停止**时写入，避免运行中的 Codex 用内存态覆盖；
@@ -34,6 +35,26 @@ export function codexStatePath(): string {
 /** 备份文件路径（不覆盖已有备份） */
 export function codexStateBackupPath(): string {
   return `${codexStatePath()}.agent-foreman-backup.json`;
+}
+
+/**
+ * 上一代品牌（tianshu-mcp）的备份后缀 —— 本仓库**唯一有意保留的旧品牌字面量**（D13 方案 A）。
+ *
+ * 为什么保留：备份是「只在不存在时创建」的防覆盖机制，保护的是**用户 Codex 原始状态**
+ * （人工回滚出口，见下方安全约束）。从 tianshu-mcp 切换过来的用户磁盘上已有
+ * `<stateFile>.tianshu-mcp-backup.json`；若改名后不识别它，首次登记就会把「已被上一代
+ * 工具改过」的状态拍成新备份，使「任何工具动手之前」的干净回滚点静默降级。
+ *
+ * 边界（为什么不违反 D5/D6）：此处只对旧文件名做**存在性判断**，不读取其内容，且作用于
+ * `~/.codex/`（Codex 自己的目录）而非 tianshu 数据目录 —— 属防覆盖，不属数据迁移或跨产品读取。
+ *
+ * 契约：该字面量只允许出现在本常量一处；禁止用字符串拼接等方式规避品牌残留检查。
+ */
+export const LEGACY_CODEX_BACKUP_SUFFIX = ".tianshu-mcp-backup.json";
+
+/** 备份候选路径：新后缀优先，旧品牌后缀次之（D13 方案 A：兼容识别旧备份） */
+export function codexStateBackupCandidates(stateFile: string = codexStatePath()): string[] {
+  return [`${stateFile}.agent-foreman-backup.json`, `${stateFile}${LEGACY_CODEX_BACKUP_SUFFIX}`];
 }
 
 interface LocalProjectEntry {
@@ -162,10 +183,20 @@ export async function ensureProjectRegistered(
   const order = Array.isArray(state["project-order"]) ? state["project-order"] : [];
   state["project-order"] = [id, ...order.filter((x) => x !== id)];
 
+  // 实际生效的备份路径（新旧皆可能）；失败时回退为默认新路径用于日志
+  let effectiveBackup = codexStateBackupPath();
   try {
-    // 备份只在不存在时创建，保留最初的良好副本
-    const backup = `${stateFile}.agent-foreman-backup.json`;
-    if (!fs.existsSync(backup)) fs.copyFileSync(stateFile, backup);
+    // 备份只在不存在时创建，保留最初的良好副本。
+    // D13 方案 A：新旧后缀都算「已存在」——命中旧备份则不新建，避免把已被上一代工具
+    // 改过的状态拍成新备份、把用户「任何工具动手之前」的干净回滚点降级。
+    const candidates = codexStateBackupCandidates(stateFile);
+    const found = candidates.find((p) => fs.existsSync(p));
+    if (found) {
+      effectiveBackup = found;
+    } else {
+      effectiveBackup = candidates[0]!;
+      fs.copyFileSync(stateFile, effectiveBackup);
+    }
     const tmp = `${stateFile}.agent-foreman-tmp`;
     fs.writeFileSync(tmp, JSON.stringify(state), "utf8");
     fs.renameSync(tmp, stateFile);
@@ -173,6 +204,7 @@ export async function ensureProjectRegistered(
     return { status: "skipped", message: `写入 Codex 状态失败：${e instanceof Error ? e.message : String(e)}` };
   }
 
-  logger.info(`[codex] 已登记项目到 Codex 列表：${name}（${id}）；备份：${stateFile}.agent-foreman-backup.json`);
+  // 打印**实际生效**的备份路径（可能是旧后缀）：用户照日志回滚才不会找错文件
+  logger.info(`[codex] 已登记项目到 Codex 列表：${name}（${id}）；备份：${effectiveBackup}`);
   return { status: "performed", projectId: id, message: `已登记项目：${name}` };
 }

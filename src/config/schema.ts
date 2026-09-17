@@ -301,7 +301,7 @@ export const GuiProfileSchema = z.object({
   appxPackageName: z.string().optional(),
   /** 发送前必须确认的权限模式（如「完全访问」）。未配置则不强制。 */
   permissionMode: z.string().optional(),
-  /** 修复计划文档输出目录（相对项目根），默认 .zcode/plans/。 */
+  /** 修复计划文档输出目录（相对项目根），默认 .agent-foreman/plans/。 */
   fixPlanDir: z.string().optional(),
 });
 export type GuiProfile = z.infer<typeof GuiProfileSchema>;

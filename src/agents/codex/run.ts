@@ -95,7 +95,7 @@ export function codexGuiOf(resolved: ResolvedAgent): GuiProfile {
     userDataDir: g?.userDataDir,
     appxPackageName: g?.appxPackageName ?? "OpenAI.Codex",
     permissionMode: g?.permissionMode ?? "完全访问",
-    fixPlanDir: g?.fixPlanDir ?? ".zcode/plans",
+    fixPlanDir: g?.fixPlanDir ?? ".agent-foreman/plans",
     defaultPermissionMode: g?.defaultPermissionMode ?? g?.permissionMode ?? "完全访问",
     defaultAutoFixRounds: g?.defaultAutoFixRounds ?? 5,
   };

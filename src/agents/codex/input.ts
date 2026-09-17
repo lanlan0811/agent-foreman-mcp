@@ -23,9 +23,9 @@ export function fixPlanFileName(round: number): string {
   return `codex-fix-r${round}.md`;
 }
 
-/** 修复计划文档在项目内的相对路径（默认 .zcode/plans/） */
+/** 修复计划文档在项目内的相对路径（默认 .agent-foreman/plans/） */
 export function fixPlanRelPath(dir: string | undefined, round: number): string {
-  const base = (dir?.trim() || ".zcode/plans").replace(/[\\/]+$/, "");
+  const base = (dir?.trim() || ".agent-foreman/plans").replace(/[\\/]+$/, "");
   return `${base.split(/[\\/]+/).join("/")}/${fixPlanFileName(round)}`;
 }
 

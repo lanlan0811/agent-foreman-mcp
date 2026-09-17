@@ -5,7 +5,7 @@
  * 决策 12：每轮独立文件、文件名含轮次号（codex-fix-r<N>.md），保留每轮修复历史、不覆盖。
  *
  * 与通用 writeRepairPlan（任务数据目录）不同：本模块把计划写入**项目内**约定目录
- * （gui.fixPlanDir，默认 .zcode/plans/），因为该文件名要写进发给 Codex 的修复指令，
+ * （gui.fixPlanDir，默认 .agent-foreman/plans/），因为该文件名要写进发给 Codex 的修复指令，
  * 而 Codex 只能读项目工作区内的文件。
  */
 import path from "node:path";
@@ -23,7 +23,7 @@ export interface CodexFixPlanInput {
   displayPath: string;
   taskText: string;
   report: VerifyReport;
-  /** 计划文档输出目录（相对项目根），默认 .zcode/plans */
+  /** 计划文档输出目录（相对项目根），默认 .agent-foreman/plans */
   fixPlanDir?: string;
   logger: AgentRunLogger;
 }

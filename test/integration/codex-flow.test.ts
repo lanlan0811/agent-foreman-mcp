@@ -35,7 +35,7 @@ function resolved(guiOverrides: Record<string, unknown> = {}): ResolvedAgent {
       activation: "msix-com",
       permissionMode: "完全访问",
       defaultPermissionMode: "完全访问",
-      fixPlanDir: ".zcode/plans",
+      fixPlanDir: ".agent-foreman/plans",
       ...guiOverrides,
     },
   });
@@ -456,7 +456,7 @@ describe("Codex 假 CDP 单轮流程", () => {
     cleanup.push(project);
     const fake = new FakeCodex(project, true);
     fake.boundProject = path.basename(project);
-    const feedback = "【上一轮验收失败】\n修复/优化计划文档：`.zcode/plans/codex-fix-r1.md`（请按计划修复）";
+    const feedback = "【上一轮验收失败】\n修复/优化计划文档：`.agent-foreman/plans/codex-fix-r1.md`（请按计划修复）";
     const result = await runCodexTask({
       ctx: ctx(project, {
         round: 1,
@@ -558,7 +558,7 @@ describe("Codex fix-loop 分支", () => {
     expect(final?.status).toBe("succeeded");
 
     // 第 1 轮失败后应生成 codex-fix-r1.md，且第 2 轮指令引用它
-    const planPath = path.join(project, ".zcode", "plans", "codex-fix-r1.md");
+    const planPath = path.join(project, ".agent-foreman", "plans", "codex-fix-r1.md");
     expect(fs.existsSync(planPath)).toBe(true);
     expect(fs.readFileSync(planPath, "utf8")).toContain("第 1 轮返修");
     expect(fake.conversation).toContain("codex-fix-r1.md");

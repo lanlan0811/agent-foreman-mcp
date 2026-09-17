@@ -268,7 +268,7 @@ export class TaskOrchestrator {
           round += 1;
 
           if (meta.agentId === "codex") {
-            // 决策 11/12：Codex 的修复计划由 MCP 自动生成，落在**项目内** .zcode/plans/
+            // 决策 11/12：Codex 的修复计划由 MCP 自动生成，落在**项目内** .agent-foreman/plans/
             // （文件名含轮次号 codex-fix-r<N>.md，不覆盖历史）；因文件名发送前已知，
             // 可直接写进修复指令，无需从回复回读。
             const roundNo = round - 1 + 1;
